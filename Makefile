@@ -39,7 +39,7 @@ userspace:
 	@$(MAKE) -C $(USERSPACE_DIR)
 
 # Fetch dependencies/libraries
-fetchDeps:
+fetchDeps: doom-deps
 	@echo "[DEPS] Fetching dependencies/libraries"
 	@mkdir -p $(INCLUDE_DIR)
 
@@ -69,7 +69,7 @@ $(BUILD_DIR)/kernel.elf: $(ARCH_DIR)/linker.ld $(OBJS)
 	$(VLD) $(LDFLAGS) -T $< $(OBJS) -o $@
 
 # Create bootable ISO
-$(ISO): doom-wad-check limine.conf build_num $(BUILD_DIR)/kernel.elf disk userspace
+$(ISO): limine.conf doom-wad-check build_num $(BUILD_DIR)/kernel.elf disk userspace
 	@echo "[ISO] Creating bootable image..."
 	@rm -rf $(ISODIR)
 	@mkdir -p $(ISODIR)/boot/limine $(ISODIR)/EFI/BOOT
