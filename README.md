@@ -1,4 +1,19 @@
-# doccrOS - a simple 64 Bit OS written in C
+<div align="center">
+	<h1> doccrOS </h1>
+
+a simple x86_64 Operating System in C made from scratch
+
+	<div>
+		<img src="screenshots/screenshot1.png" width="23%" />
+		<img src="screenshots/screenshot2.png" width="23%" />
+		<img src="screenshots/screenshot3.png" width="23%" />
+		<img src="screenshots/screenshot4.png" width="23%" />
+	</div>
+	<br>
+	<a href="https://discord.gg/88mpV6NEr7">
+		<img src="https://img.shields.io/badge/Join%20the%20Discord-Black?style=for-the-badge&logo=discord&logoColor=white&color=black" alt="Discord Badge" />
+	</a>
+</div>
 
 ## Build Dependencies
 For building and compiling doccrOS, ensure you have the following installed -
