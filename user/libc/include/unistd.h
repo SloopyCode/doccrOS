@@ -21,6 +21,7 @@
 #define SYS_CLOSE         3
 #define SYS_IOCTL        16
 #define SYS_FORK         57
+#define SYS_EXECVE       59
 #define SYS_EXIT         60
 #define SYS_GETPID       39
 #define SYS_YIELD        24
@@ -34,11 +35,15 @@
 #define SYS_UNLINK       87
 #define SYS_GETUID      102
 #define SYS_GETGID      104
+#define SYS_REBOOT      169
 #define SYS_CLOCK_GETTIME 228
 
 #define SEEK_SET        0
 #define SEEK_CUR        1
 #define SEEK_END        2
+
+#define REBOOT_SHUTDOWN 0
+#define REBOOT_REBOOT   1
 
 long write(int fd, const void *buf, size_t count);
 long read(int fd, void *buf, size_t count);
@@ -48,6 +53,7 @@ long ioctl(int fd, unsigned long request, void *arg);
 long lseek(int fd, long offset, int whence);
 long getpid(void);
 long fork(void);
+long execve(const char *path, char *const argv[], char *const envp[]);
 void yield(void);
 long waitpid(long pid, int *wstatus, int options);
 long getuid(void);
@@ -58,6 +64,8 @@ long getdents(int fd, void *buf, size_t size);
 void *brk_call(void *addr);
 struct timespec;
 int clock_gettime(int clock_id, struct timespec *timespec);
+
+long reboot(int cmd);
 
 __attribute__((noreturn)) void _exit(int code);
 

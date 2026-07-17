@@ -14,7 +14,14 @@
 #include <kernel/proc/thread.h>
 #include <kernel/proc/process.h>
 #include <kernel/proc/scheduler.h>
+#include <kernel/fs/vfs/vfs.h>
+#include <kernel/packages/elf/elf.h>
 #include <kernel/communication/serial.h>
+
+static int user_ptr_ok(u64 ptr)
+{
+    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
+}
 
 void sys_exit(cpu_state_t *state)
 {
@@ -38,6 +45,42 @@ void sys_fork(cpu_state_t *state)
 {
     proc_t *child = process_fork(state);
     state->rax = child ? child->pid : (u64)-1;
+}
+
+void sys_execve(cpu_state_t *state)
+{
+    const char *path =  (const char *)state->rdi;
+
+    if (!user_ptr_ok((u64)path))
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    vfs_node_t *node = vfs_find(path);
+    if (!node || node->type != VFS_FILE || !node->data || node->size == 0)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    proc_t *p = process_get_current();
+    if (!p)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    const char *name = path;
+    for (const char *s = path; *s; s++) if (*s == '/') name = s + 1;
+
+    if (elf_exec_replace(p, state, node->data, node->size, name) != 0)
+    {
+        printf("[SYS_EXECVE] exec of '%s' failed, killing pid=%llu\n", path, p->pid);
+        process_exit(p, 1);
+        sched_yield();
+        state->rax = (u64)-1;
+    }
 }
 
 void sys_waitpid(cpu_state_t *state)

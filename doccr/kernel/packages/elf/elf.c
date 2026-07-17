@@ -271,3 +271,134 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps)
     log("[ELF]", "process scheduled\n", success);
     return 0;
 }
+
+#define USER_STACK_PAGES_EXEC USER_STACK_PAGES
+
+static int elf_map_segments_and_stack(
+	proc_t *p,
+	const u8 *data,
+	u64 size,
+    const elf64_ehdr_t *eh,
+    u64 *out_entry
+){
+    u64 hhdm = paging_get_hhdm_offset();
+
+    for (u16 i = 0; i < eh->e_phnum; i++)
+    {
+        const elf64_phdr_t *ph = (const elf64_phdr_t *)(data + eh->e_phoff + (u64)i * eh->e_phentsize);
+
+        if (ph->p_type != PT_LOAD) continue;
+        if (ph->p_offset + ph->p_filesz > size) return -1;
+        if (ph->p_memsz < ph->p_filesz) return -1;
+
+        u64 va_base  = align_down(ph->p_vaddr, 4096);
+        u64 va_end   = align_up(ph->p_vaddr + ph->p_memsz, 4096);
+        u64 pg_count = (va_end - va_base) / 4096;
+
+        u32 vmm_flags = VMM_REGION_USER | VMM_REGION_READ;
+        if (ph->p_flags & PF_W) vmm_flags |= VMM_REGION_WRITE;
+        if (ph->p_flags & PF_X) vmm_flags |= VMM_REGION_EXEC;
+
+        u64 mapped = vmm_space_alloc(p->space, va_base, pg_count, vmm_flags);
+        if (!mapped) return -1;
+
+        u64 file_src  = (u64)(data + ph->p_offset);
+        u64 file_rem  = ph->p_filesz;
+        u64 va_cursor = ph->p_vaddr;
+        u64 mem_rem   = ph->p_memsz;
+
+        while (mem_rem > 0)
+        {
+            u64 page_va   = align_down(va_cursor, 4096);
+            u64 page_off  = va_cursor - page_va;
+            u64 phys      = vmm_space_get_phys(p->space, page_va);
+            if (!phys) return -1;
+
+            u8 *dest  = (u8 *)(phys + hhdm + page_off);
+            u64 chunk = 4096 - page_off;
+            if (chunk > mem_rem) chunk = mem_rem;
+
+            if (file_rem > 0)
+            {
+                u64 copy = (chunk < file_rem) ? chunk : file_rem;
+                memcpy(dest, (const void *)file_src, copy);
+                file_src += copy;
+                file_rem -= copy;
+                dest  += copy;
+                chunk -= copy;
+            }
+            if (chunk > 0) memset(dest, 0, chunk);
+
+            u64 step = 4096 - page_off;
+            if (step > mem_rem) step = mem_rem;
+            va_cursor += step;
+            mem_rem -= step;
+        }
+    }
+
+    u64 stack = vmm_space_alloc(
+        p->space,
+        USER_STACK_BASE, USER_STACK_PAGES_EXEC,
+        VMM_REGION_USER | VMM_REGION_READ | VMM_REGION_WRITE
+    );
+    if (!stack) return -1;
+
+    *out_entry = eh->e_entry;
+    return 0;
+}
+
+int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name)
+{
+    if (!p || !state || !data || size == 0) return -1;
+    if (elf_check(data, size) != 0) return -1;
+
+    const elf64_ehdr_t *eh = (const elf64_ehdr_t *)data;
+
+    printf("[ELF] execve replacing '%s' image with '%s'\n", p->name, name ? name : "?");
+
+    vmm_region_t *cur = p->space->regions;
+    while (cur)
+    {
+        u64 base = cur->base;
+        cur = cur->next;
+        vmm_space_free(p->space, base);
+    }
+
+    u64 entry = 0;
+    if (elf_map_segments_and_stack(p, data, size, eh, &entry) != 0)
+    {
+        printf("[ELF] execve: mapping new image failed, address space is gone\n");
+        return -1;
+    }
+
+    int i = 0;
+    if (name)
+    {
+        while (name[i] && i < 63) { p->name[i] = name[i]; i++; }
+    }
+    p->name[i] = '\0';
+    p->heap_break = 0;
+
+    state->rip    = entry;
+    state->rsp    = USER_STACK_TOP;
+    state->rflags = 0x202;
+    state->rax    = 0;
+    state->rbx    = 0;
+    state->rcx    = 0;
+    state->rdx    = 0;
+    state->rsi    = 0;
+    state->rdi    = 0;
+    state->rbp    = 0;
+    state->r8     = 0;
+    state->r9     = 0;
+    state->r10    = 0;
+    state->r11    = 0;
+    state->r12    = 0;
+    state->r13    = 0;
+    state->r14    = 0;
+    state->r15    = 0;
+
+    log("[ELF]", "execve replaced process image\n", success);
+
+    return 0;
+}

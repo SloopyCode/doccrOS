@@ -26,6 +26,7 @@
 #define SYS_MUNMAP         11
 #define SYS_BRK            12
 #define SYS_FORK           57
+#define SYS_EXECVE         59
 #define SYS_EXIT           60
 #define SYS_GETPID         39
 #define SYS_YIELD          24
@@ -35,6 +36,7 @@
 #define SYS_UNLINK         87
 #define SYS_GETUID        102
 #define SYS_GETGID        104
+#define SYS_REBOOT        169
 #define SYS_CLOCK_GETTIME 228
 // TODO:
 // SYS_EXEC, SYS_SPAWN then here exec/spawn path.

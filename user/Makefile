@@ -16,6 +16,7 @@ all:
 	@$(MAKE) -C bin/syscall_test
 	@$(MAKE) -C bin/test_graphics
 	@$(MAKE) -C bin/doomgeneric
+	@$(MAKE) -C bin/poweroff
 
 clean:
 	@$(MAKE) -C libc clean
@@ -24,5 +25,6 @@ clean:
 	@$(MAKE) -C bin/syscall_test clean
 	@$(MAKE) -C bin/test_graphics clean
 	@$(MAKE) -C bin/doomgeneric clean
+	@$(MAKE) -C bin/poweroff clean
 
 .PHONY: all clean

@@ -17,6 +17,7 @@
 #include "sys_process.h"
 #include "sys_mem.h"
 #include "sys_ioctl.h"
+#include "sys_power.h"
 
 
 #include <kernel/arch/x86_64/idt/idt.h>
@@ -89,6 +90,7 @@ void syscall_dispatch(cpu_state_t *state)
 	    case SYS_MUNMAP:       sys_munmap(state);       break;
 	    case SYS_BRK:          sys_brk(state);          break;
 	    case SYS_FORK:         sys_fork(state);         break;
+		case SYS_EXECVE:       sys_execve(state);       break;
 	    case SYS_EXIT:         sys_exit(state);         break;
 	    case SYS_YIELD:        sys_yield(state);        break;
 	    case SYS_GETPID:       sys_getpid(state);       break;
@@ -98,6 +100,7 @@ void syscall_dispatch(cpu_state_t *state)
 	    case SYS_UNLINK:       sys_unlink(state);       break;
 	    case SYS_GETUID:       sys_getuid(state);       break;
 	    case SYS_GETGID:       sys_getgid(state);       break;
+		case SYS_REBOOT:       sys_reboot(state);       break;
         case SYS_CLOCK_GETTIME: {
             struct user_timespec { i64 tv_sec; i64 tv_nsec; };
             struct user_timespec *ts = (void *)state->rsi;

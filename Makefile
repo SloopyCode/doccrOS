@@ -84,6 +84,7 @@ $(ISO): limine.conf doom-wad-check build_num $(BUILD_DIR)/kernel.elf disk usersp
 	@cp $(USERSPACE_DIR)/bin/syscall_test/syscall_test.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/test_graphics/test_graphics.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/doomgeneric/doomgeneric.elf $(DISK_DIR)/rd/bin/
+	@cp $(USERSPACE_DIR)/bin/poweroff/poweroff.elf $(DISK_DIR)/rd/bin/
 	@cp "$(DOOM_WAD)" $(DISK_DIR)/rd/doom1.wad
 
 	@echo "[MK] creating initrd.cpio..."

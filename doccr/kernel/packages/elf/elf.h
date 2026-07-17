@@ -14,6 +14,8 @@
 #define ELF_H
 
 #include <types.h>
+#include <kernel/proc/process.h>
+#include <kernel/arch/x86_64/idt/idt.h>
 
 #define ELF_MAGIC0      0x7F
 #define ELF_MAGIC1      'E'
@@ -63,5 +65,6 @@ typedef struct
 } __attribute__((packed)) elf64_phdr_t;
 
 int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps);
+int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name);
 
 #endif

@@ -163,3 +163,13 @@ int clock_gettime(int clock_id, struct timespec *timespec)
 {
     return (int)syscall3(SYS_CLOCK_GETTIME, clock_id, (long)timespec, 0);
 }
+
+long execve(const char *path, char *const argv[], char *const envp[])
+{
+    return syscall3(SYS_EXECVE, (long)path, (long)argv, (long)envp);
+}
+
+long reboot(int cmd)
+{
+    return syscall3(SYS_REBOOT, cmd, 0, 0);
+}
