@@ -347,6 +347,69 @@ static int elf_map_segments_and_stack(
     return 0;
 }
 
+
+static u64 setup_initial_stack(vmm_space_t *space, const char *prog_name)
+{
+    u64 hhdm = paging_get_hhdm_offset();
+    u64 top = USER_STACK_TOP;
+
+    u64 name_len = 0;
+    while (prog_name[name_len]) name_len++;
+    name_len++; /* NUL */
+
+    u64 str_addr = (top - name_len) & ~0xFULL;
+
+    {
+        u64 va = str_addr, remaining = name_len;
+        const char *src = prog_name;
+        while (remaining > 0)
+        {
+            u64 page_va  = va & ~0xFFFULL;
+            u64 page_off = va - page_va;
+            u64 phys     = vmm_space_get_phys(space, page_va);
+            if (!phys) return 0;
+
+            u8 *dest  = (u8 *)(phys + hhdm + page_off);
+            u64 chunk = 4096 - page_off;
+            if (chunk > remaining) chunk = remaining;
+
+            memcpy(dest, src, chunk);
+            va += chunk; src += chunk; remaining -= chunk;
+        }
+    }
+
+    u64 vals[6] = {
+        1,          /* argc */
+        str_addr,   /* argv[0] */
+        0,          /* argv terminator */
+        0,          /* envp terminator (leeres envp) */
+        0, 0        /* auxv terminator (AT_NULL) */
+    };
+
+    u64 sp = (str_addr - sizeof(vals)) & ~0xFULL;
+
+    {
+        u64 va = sp, remaining = sizeof(vals);
+        u8 *src = (u8 *)vals;
+        while (remaining > 0)
+        {
+            u64 page_va  = va & ~0xFFFULL;
+            u64 page_off = va - page_va;
+            u64 phys     = vmm_space_get_phys(space, page_va);
+            if (!phys) return 0;
+
+            u8 *dest  = (u8 *)(phys + hhdm + page_off);
+            u64 chunk = 4096 - page_off;
+            if (chunk > remaining) chunk = remaining;
+
+            memcpy(dest, src, chunk);
+            va += chunk; src += chunk; remaining -= chunk;
+        }
+    }
+
+    return sp;
+}
+
 int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name)
 {
     if (!p || !state || !data || size == 0) return -1;
@@ -377,10 +440,32 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
         while (name[i] && i < 63) { p->name[i] = name[i]; i++; }
     }
     p->name[i] = '\0';
+
+    thread_t *t = thread_get_current();
+    if (t)
+    {
+        int k  = 0;
+        while (
+        	name[k] &&
+         	k < THREAD_NAME_MAX - 1
+        ) {
+        	t->name[k] = name[k];
+         	k++;
+        }
+        t->name[k] = '\0';
+    }
+
     p->heap_break = 0;
 
+    u64 stack_top = setup_initial_stack(p->space, name);
+    if (!stack_top)
+    {
+        printf("[ELF] execve, setup initial stack '%s'\n", name);
+        return -1;
+    }
+
     state->rip    = entry;
-    state->rsp    = USER_STACK_TOP;
+    state->rsp    = stack_top;
     state->rflags = 0x202;
     state->rax    = 0;
     state->rbx    = 0;

@@ -18,6 +18,7 @@
 #include <limine/limine.h>
 #include <kernel/screen/lib/print.h>
 #include <kernel/screen/lib/string.h>
+#include <kernel/screen/bootscreen/boot.h>
 
 extern u32 *framebuffer;
 extern u32 fb_width;

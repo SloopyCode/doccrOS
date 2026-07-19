@@ -15,6 +15,7 @@
 #include <kernel/mem/meminclude.h>
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
+#include <kernel/user/fb.h>
 
 extern void fork_child_return(void);
 
@@ -52,7 +53,11 @@ static proc_t *proc_alloc(const char *name)
     p->threads = NULL;
     p->thread_count = 0;
     p->alive_count  = 0;
-    p->capabilities = 0;
+    #ifdef ALWAYS_CAPFB 1
+    	p->capabilities = CAP_FRAMEBUFFER;
+    #else
+    	p->capabilities = 0;
+    #endif
     p->next = head;
 
     p->fd_table[0].used = 1;
@@ -90,7 +95,12 @@ proc_t *process_create_user(const char *name, u64 initial_caps)
     proc_t *p = proc_alloc(name);
     if (!p) return NULL;
 
-    p->capabilities = initial_caps;
+    #ifdef ALWAYS_CAPFB 1
+    	p->capabilities = initial_caps | CAP_FRAMEBUFFER;
+    #else
+    	p->capabilities = initial_caps;
+    #endif
+
     p->space = vmm_space_create();
 
     if (!p->space)

@@ -238,8 +238,13 @@ void vmm_space_destroy(vmm_space_t *space)
         cur = space->regions;
     }
 
-    if (space->pml4_phys)
-        physmem_free_to(space->pml4_phys, 1);
+    if (space->pml4_phys) physmem_free_to(space->pml4_phys, 1);
+
+    if (vmm_get_active_space() == space)
+    {
+        arch_mmu_activate(kernel_space.pml4_phys);
+        vmm_space_activate(&kernel_space);
+    }
 
     kfree((u64 *)space);
 }
@@ -461,6 +466,12 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
     vmm_region_t *src_cur = src->regions;
     while (src_cur)
     {
+        if (src_cur->flags & VMM_REGION_MMIO)
+        {
+            src_cur = src_cur->next;
+            continue;
+        }
+
         vmm_region_t *node = region_alloc();
         if (!node)
         {
@@ -524,7 +535,6 @@ void vmm_cow_break(vmm_space_t *space, u64 fault_addr)
 
     vmm_region_t *region = vmm_space_find(space, fault_addr);
     if (!region) return;
-    if (!(region->flags & VMM_REGION_COW)) return;
 
     u64 hhdm     = paging_get_hhdm_offset();
     u64 pml4_idx = (fault_addr >> 39) & 0x1FF;
@@ -544,6 +554,8 @@ void vmm_cow_break(vmm_space_t *space, u64 fault_addr)
     page_table_t *pt = (page_table_t *)((pd->entries[pd_idx] & 0x000FFFFFFFFFF000) + hhdm);
     if (!(pt->entries[pt_idx] & PTE_PRESENT)) return;
 
+    if (pt->entries[pt_idx] & PTE_WRITABLE) return;
+
     u64 old_phys = pt->entries[pt_idx] & 0x000FFFFFFFFFF000;
 
     u32 rc = physmem_frame_rc_dec_and_get(old_phys);
@@ -552,11 +564,7 @@ void vmm_cow_break(vmm_space_t *space, u64 fault_addr)
     {
         physmem_frame_flags_set(old_phys, FRAME_USED);
 
-        u32 orig_flags  = region->flags & ~VMM_REGION_COW;
-        orig_flags     |= VMM_REGION_WRITE;
-        region->flags   = VMM_REGION_USED | orig_flags;
-
-        u64 pte_flags = flags_to_pte(region->flags);
+        u64 pte_flags = flags_to_pte(region->flags | VMM_REGION_WRITE);
         paging_map_page_in(space->pml4_phys, fault_addr, old_phys, pte_flags);
         return;
     }
@@ -570,11 +578,7 @@ void vmm_cow_break(vmm_space_t *space, u64 fault_addr)
 
     physmem_frame_flags_set(new_phys, FRAME_USED);
 
-    u32 orig_flags  = region->flags & ~VMM_REGION_COW;
-    orig_flags     |= VMM_REGION_WRITE;
-    region->flags   = VMM_REGION_USED | orig_flags;
-
-    u64 pte_flags = flags_to_pte(region->flags);
+    u64 pte_flags = flags_to_pte(region->flags | VMM_REGION_WRITE);
     paging_map_page_in(space->pml4_phys, fault_addr, new_phys, pte_flags);
 }
 

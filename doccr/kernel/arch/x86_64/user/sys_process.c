@@ -57,7 +57,16 @@ void sys_execve(cpu_state_t *state)
         return;
     }
 
-    vfs_node_t *node = vfs_find(path);
+    char path_buf[VFS_MAX_PATH];
+    int i = 0;
+    while (path[i]  && i < VFS_MAX_PATH - 1)
+    {
+        path_buf[i] = path[i];
+        i++;
+    }
+    path_buf[i] = '\0';
+
+    vfs_node_t *node = vfs_find(path_buf);
     if (!node || node->type != VFS_FILE || !node->data || node->size == 0)
     {
         state->rax = (u64)-1;
@@ -71,12 +80,23 @@ void sys_execve(cpu_state_t *state)
         return;
     }
 
-    const char *name = path;
-    for (const char *s = path; *s; s++) if (*s == '/') name = s + 1;
-
-    if (elf_exec_replace(p, state, node->data, node->size, name) != 0)
+    char name_buf[64];
     {
-        printf("[SYS_EXECVE] exec of '%s' failed, killing pid=%llu\n", path, p->pid);
+        const char *base   = path_buf;
+        for (const char *s = path_buf; *s; s++) if (*s == '/') base = s + 1;
+
+        int j = 0;
+        while (base[j] && j < 63)
+        {
+        	name_buf[j] = base[j];
+         	j++;
+        }
+        name_buf[j] = '\0';
+    }
+
+    if (elf_exec_replace(p, state, node->data, node->size, name_buf) != 0)
+    {
+        printf("[SYS_EXECVE] exec of '%s' failed, killing pid=%llu\n", path_buf, p->pid);
         process_exit(p, 1);
         sched_yield();
         state->rax = (u64)-1;
