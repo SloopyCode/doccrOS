@@ -17,11 +17,12 @@
 #include <kernel/proc/process.h>
 #include <kernel/screen/lib/print.h>
 #include <kernel/screen/lib/log.h>
+#include <kernel/screen/graphics.h>
 #include <kernel/communication/serial.h>
 
 #define DOOM_PATH "/bin/doomgeneric.elf"
 #define DOOM_NAME "doomgeneric.elf"
-#define DESKTOP_PATH "/emr/system/desktop.elf"
+#define DESKTOP_PATH "/system/desktop/desktop.elf"
 #define DESKTOP_NAME "desktop.elf"
 
 static void load_elf(const char *path, const char *name, u64 initial_caps)
@@ -60,6 +61,11 @@ static void load_elf(const char *path, const char *name, u64 initial_caps)
 
 void user_start(void)
 {
+	bs.Clear(BS1);
+	bs.Clear(BS2);
+	bs.Clear(BS3);
+	bs.Clear(BS4);
+    clear(0xFF000000);
     load_elf(DESKTOP_PATH, DESKTOP_NAME, CAP_FRAMEBUFFER);
     //load_elf(DOOM_PATH, DOOM_NAME, CAP_FRAMEBUFFER);
     //load_elf("/emr/login.elf", "login.elf", CAP_FRAMEBUFFER);

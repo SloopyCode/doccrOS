@@ -25,8 +25,6 @@ void sys_open(cpu_state_t *state)
     const char *path = (const char *)state->rdi;
     u64 flags        = state->rsi;
 
-    (void)flags;
-
     if (!user_ptr_ok((u64)path))
     {
         state->rax = (u64)-1;
@@ -34,6 +32,10 @@ void sys_open(cpu_state_t *state)
     }
 
     vfs_node_t *node = vfs_find(path);
+    if (!node && (flags & K_O_CREAT))
+    {
+        node = vfs_create_file(path);
+    }
     if (!node)
     {
         state->rax = (u64)-1;

@@ -13,6 +13,8 @@
 #ifndef SYS_FS_H
 #define SYS_FS_H
 
+#define K_O_CREAT 0100
+
 #include <types.h>
 #include <kernel/arch/x86_64/idt/idt.h>
 

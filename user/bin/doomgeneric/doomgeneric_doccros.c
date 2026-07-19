@@ -1,15 +1,12 @@
 #include "doomgeneric.h"
 #include "doomkeys.h"
-#include <sys/fb.h>
 #include <sys/input.h>
+#include <libdesktop.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
-
-static int fb_fd;
-static uint32_t *fb;
-static fb_info_t fi;
+#include <stdio.h>
 
 #ifndef DOCCROS_DOOM_SCALE
 #define DOCCROS_DOOM_SCALE 2
@@ -17,6 +14,11 @@ static fb_info_t fi;
 #if DOCCROS_DOOM_SCALE < 1 || DOCCROS_DOOM_SCALE > 2
 #error "DOCCROS_DOOM_SCALE must be 1 or 2"
 #endif
+
+#define DOOM_WIN_W (DOOMGENERIC_RESX * DOCCROS_DOOM_SCALE)
+#define DOOM_WIN_H (DOOMGENERIC_RESY * DOCCROS_DOOM_SCALE)
+
+static uint32_t s_winbuf[DOOM_WIN_W * DOOM_WIN_H];
 
 static unsigned char keymap(uint16_t k) {
     static const char rows[]="1234567890-=\0\0qwertyuiop[]\0\0asdfghjkl;'`\0\\zxcvbnm,./";
@@ -51,34 +53,65 @@ static unsigned char keymap(uint16_t k) {
         return (unsigned char)rows[k - INPUT_KEY_1];
     return 0;
 }
-void DG_Init(void) {
-    fb_fd=(int)open("/dev/fb0",0); if(fb_fd<0)_exit(2);
-    if(ioctl(fb_fd,FB_IOCTL_GET_INFO,&fi)<0)_exit(3);
-    unsigned long address=0;if(ioctl(fb_fd,FB_IOCTL_MAP,&address)<0)_exit(4);fb=(uint32_t*)address;
-    memset(fb,0,(size_t)fi.width*fi.height*sizeof(uint32_t));
-    ioctl(fb_fd,FB_IOCTL_FLUSH,0);
+
+void DG_Init(void)
+{
+    int win_w, win_h;
+
+    desktopWindowSizeForContent(
+        DOOM_WIN_W,
+        DOOM_WIN_H,
+        DT_WIN,
+        &win_w,
+        &win_h
+    );
+
+    int rc = desktop.createWindow(
+        "DOOM",
+        100, 100,
+        win_w, win_h,
+        DT_WIN
+    );
+
+    char msg[64];
+    snprintf(msg, sizeof(msg),
+             "[DOOM] createWindow rc=%d content=%dx%d\\n",
+             rc, DOOM_WIN_W, DOOM_WIN_H);
+    write(1, msg, strlen(msg));
+
+    memset(s_winbuf, 0, sizeof(s_winbuf));
+    desktop.winbuf_write(s_winbuf, DOOM_WIN_W, DOOM_WIN_H);
 }
-void DG_DrawFrame(void) {
-    uint32_t sx=fi.width/DOOMGENERIC_RESX,sy=fi.height/DOOMGENERIC_RESY;
-    uint32_t scale=sx<sy?sx:sy;if(!scale)scale=1;if(scale>DOCCROS_DOOM_SCALE)scale=DOCCROS_DOOM_SCALE;
-    uint32_t width=DOOMGENERIC_RESX*scale,height=DOOMGENERIC_RESY*scale;
-    uint32_t ox=(fi.width-width)/2,oy=(fi.height-height)/2,stride=fi.width;
-    if(scale==1){
-        for(uint32_t y=0;y<DOOMGENERIC_RESY;y++)
-            memcpy(&fb[(oy+y)*stride+ox],&DG_ScreenBuffer[y*DOOMGENERIC_RESX],DOOMGENERIC_RESX*sizeof(uint32_t));
-    }else{
-        for(uint32_t y=0;y<DOOMGENERIC_RESY;y++){
-            uint32_t *row=&fb[(oy+y*2)*stride+ox];
-            const uint32_t *src=&DG_ScreenBuffer[y*DOOMGENERIC_RESX];
-            for(uint32_t x=0;x<DOOMGENERIC_RESX;x++){row[x*2]=src[x];row[x*2+1]=src[x];}
-            memcpy(row+stride,row,width*sizeof(uint32_t));
-        }
+
+void DG_DrawFrame(void)
+{
+    static uint32_t frames = 0;
+
+    if ((frames++ % 60) == 0)
+    {
+        write(1, "[DOOM] frame\\n", 13);
     }
-    fb_rect_t rect={ox,oy,width,height};
-    ioctl(fb_fd,FB_IOCTL_FLUSH_RECT,&rect);
+
+    for (uint32_t y = 0; y < DOOMGENERIC_RESY; y++) {
+        uint32_t *row = &s_winbuf[(y * 2) * DOOM_WIN_W];
+        const uint32_t *src = &DG_ScreenBuffer[y * DOOMGENERIC_RESX];
+
+        for (uint32_t x = 0; x < DOOMGENERIC_RESX; x++) {
+            row[x * 2]     = src[x];
+            row[x * 2 + 1] = src[x];
+        }
+
+        memcpy(row + DOOM_WIN_W, row,
+               DOOM_WIN_W * sizeof(uint32_t));
+    }
+
+    desktop.winbuf_write(s_winbuf, DOOM_WIN_W, DOOM_WIN_H);
 }
+
 uint32_t DG_GetTicksMs(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return(uint32_t)(t.tv_sec*1000+t.tv_nsec/1000000);}
 void DG_SleepMs(uint32_t ms){uint32_t end=DG_GetTicksMs()+ms;while((int32_t)(DG_GetTicksMs()-end)<0)yield();}
+
 int DG_GetKey(int*pressed,unsigned char*key){input_event_t e;long n=read(0,&e,sizeof e);if(n!=(long)sizeof e||e.type!=INPUT_EV_KEY)return 0;*key=keymap(e.code);if(!*key)return 0;*pressed=e.value!=0;return 1;}
-void DG_SetWindowTitle(const char*t){(void)t;}
+
+void DG_SetWindowTitle(const char*t){ desktop.setTitle(t); }
 int main(void){char *argv[]={"doomgeneric","-iwad","/doom1.wad",0};doomgeneric_Create(3,argv);for(;;)doomgeneric_Tick();}
