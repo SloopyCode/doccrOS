@@ -1,12 +1,10 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (c) 2026 emex-foundation
+# Copyright (c) 2026 sulfurLabs
 #
+# PROJECT: sulfurOS
 # FILE: Makefile
-# CREATED BY: emex
-# MODIFIED BY: Offihito
-#
 #
 
 all:
@@ -14,11 +12,13 @@ all:
 	@$(MAKE) -C bin/hello
 	@$(MAKE) -C bin/doomgeneric
 	@$(MAKE) -C bin/poweroff
+	@$(MAKE) -C bin/reboot
 
 clean:
 	@$(MAKE) -C libc clean
 	@$(MAKE) -C bin/hello clean
 	@$(MAKE) -C bin/doomgeneric clean
 	@$(MAKE) -C bin/poweroff clean
+	@$(MAKE) -C bin/reboot clean
 
 .PHONY: all clean

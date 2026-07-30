@@ -1,12 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Copyright (c) 2026 doccrLabs
+ * Copyright (c) 2026 sulfurLabs
  *
- * PROJECT: doccrOS
+ * PROJECT: sulfurOS
  * FILE: stdlib.c
- * CREATED BY: Offihito
- * MODIFIED BY: --
  *
  */
 
@@ -15,7 +13,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
-#define ARENA_SIZE (8UL * 1024 * 1024)
+#define ARENA_SIZE (32UL * 1024 * 1024)
 #define MALLOC_ALIGNMENT 16
 
 typedef struct block {

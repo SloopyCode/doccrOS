@@ -1,0 +1,168 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Copyright (c) 2026 sulfurLabs
+ *
+ * PROJECT: sulfurOS
+ * FILE: sys_io.c
+ *
+ */
+
+#include "sys_io.h"
+#include <kernel/screen/lib/print.h>
+#include <kernel/devices/input/kbd.h>
+#include <kernel/communication/serial.h>
+#include <kernel/proc/process.h>
+#include <kernel/fs/vfs/vfs.h>
+#include <kernel/devices/device_init.h>
+#include <kernel/mem/mem.h>
+
+static int user_ptr_ok(u64 ptr)
+{
+    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
+}
+
+void sys_read(cpu_state_t *state)
+{
+    u64 fd  = state->rdi;
+    char *buf = (char *)state->rsi;
+    u64 len = state->rdx;
+
+    if (!user_ptr_ok((u64)buf))
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (fd == 0)
+    {
+        state->rax = kbd_read_events(buf, len);
+        return;
+    }
+
+    if (fd < 3 || fd >= FD_MAX)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    proc_t *p = process_get_current();
+    if (!p    || !p->fd_table[fd].used)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    vfs_node_t *node = p->fd_table[fd].node;
+    if (!node)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (node->type == VFS_DEVICE)
+    {
+        if (!node->device || !node->device->read)
+        {
+            state->rax = (u64)-1;
+            return;
+        }
+
+        state->rax  = (u64)node->device->read(p->fd_table[fd].device_handle, buf, len);
+        return;
+    }
+
+    if (node->type != VFS_FILE)
+    {
+        state->rax  = (u64)-1;
+        return;
+    }
+
+    u64 offset  = p->fd_table[fd].offset;
+    if (offset >= node->size)
+    {
+        state->rax = 0;
+        return;
+    }
+
+    u64 remaining = node->size - offset;
+    u64 to_copy   = (len < remaining) ? len : remaining;
+
+    memcpy(buf, node->data + offset, to_copy);
+    p->fd_table[fd].offset += to_copy;
+
+    state->rax    = to_copy;
+}
+
+void sys_write(cpu_state_t *state)
+{
+    u64 fd        = state->rdi;
+    const char *buf = (const char *)state->rsi;
+    u64 len       = state->rdx;
+    proc_t *p     = process_get_current();
+
+    if (!user_ptr_ok((u64)buf))
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (fd == 1 || fd == 2)
+    {
+        int owns_framebuffer = p && process_has_cap(p, CAP_FRAMEBUFFER);
+        for (u64 i = 0; i < len; i++)
+        {
+            /* A graphics server owns the display contents. Keep its console
+             * output on serial so text rendering and full-screen scrolling do
+             * not destroy the framebuffer or stall application startup. */
+            if (!owns_framebuffer) putchar(buf[i], white());
+            serial_putchar(buf[i]);
+        }
+        state->rax = len;
+        return;
+    }
+
+    if (fd < 3 || fd >= FD_MAX)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (!p || !p->fd_table[fd].used)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    vfs_node_t *node = p->fd_table[fd].node;
+    if (!node)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (node->type == VFS_DEVICE)
+    {
+        if (!node->device || !node->device->write)
+        {
+            state->rax = (u64)-1;
+            return;
+        }
+
+        state->rax = (u64)node->device->write(p->fd_table[fd].device_handle, buf, len);
+        return;
+    }
+
+    if (node->type != VFS_FILE)
+    {
+        state->rax  = (u64)-1;
+        return;
+    }
+
+    u64 offset = p->fd_table[fd].offset;
+    int written = vfs_write(node, buf, len, offset);
+
+    if (written > 0) p->fd_table[fd].offset += (u64)written;
+
+    state->rax = (written < 0) ? (u64)-1 : (u64)written;
+}

@@ -1,0 +1,277 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Copyright (c) 2026 sulfurLabs
+ *
+ * PROJECT: sulfurOS
+ * FILE: paging.c
+ * CREDITS: tsaraki
+ *
+ */
+
+#include "paging.h"
+#include "../kheap/kheap.h"
+
+#include <limine/limine.h>
+#include <kernel/arch/hal/panic.h>
+
+#include <kernel/screen/lib/string.h>
+#include <kernel/communication/serial.h>
+
+extern u8 _kernel_start[];
+extern u8 _kernel_end[];
+
+static page_table_t *kernel_pml4 = NULL;
+static u64 hhdm_offset = 0;
+
+
+/// Summary
+/// 2025/11/17 tsaraki
+/// so paging of a 4096 bytes
+void paging_map_page(
+    limine_hhdm_response_t *hpr,
+    u64 virtual_addr,
+    u64 physical_addr,
+    u64 flags
+) {
+
+    u64 pml4_index = (virtual_addr >> 39) & 0x1FF;
+    u64 pdp_index  = (virtual_addr >> 30) & 0x1FF;
+    u64 pd_index   = (virtual_addr >> 21) & 0x1FF;
+    u64 pt_index   = (virtual_addr >> 12) & 0x1FF;
+
+    // Get or create PDPT
+    page_table_t* pdpt = NULL;
+    if (!(kernel_pml4->entries[pml4_index] & PTE_PRESENT)) {
+        u64 pdpt_phys = physmem_alloc_to(1);
+        if (!pdpt_phys) panic("Could not allocate PDPT!");
+
+        kernel_pml4->entries[pml4_index] = (pdpt_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE;
+
+        pdpt = (page_table_t*)(pdpt_phys + hpr->offset);
+        memset(pdpt, 0, PAGE_SIZE);
+    } else {
+        u64 pdpt_phys = kernel_pml4->entries[pml4_index] & 0x000FFFFFFFFFF000;
+        pdpt = (page_table_t*)(pdpt_phys + hpr->offset);
+    }
+
+    // Get or create PD
+    page_table_t* pd = NULL;
+    if (!(pdpt->entries[pdp_index] & PTE_PRESENT)) {
+        u64 pd_phys = physmem_alloc_to(1);
+        if (!pd_phys) panic("Could not allocate PD!");
+
+        pdpt->entries[pdp_index] = (pd_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE;
+
+        pd = (page_table_t*)(pd_phys + hpr->offset);
+        memset(pd, 0, PAGE_SIZE);
+    } else {
+        u64 pd_phys = pdpt->entries[pdp_index] & 0x000FFFFFFFFFF000;
+        pd = (page_table_t*)(pd_phys + hpr->offset);
+    }
+
+    // Get or create PT
+    page_table_t* pt = NULL;
+    if (!(pd->entries[pd_index] & PTE_PRESENT)) {
+        u64 pt_phys = physmem_alloc_to(1);
+        if (!pt_phys) panic("Could not allocate PT!");
+
+        pd->entries[pd_index] = (pt_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE;
+
+        pt = (page_table_t*)(pt_phys + hpr->offset);
+        memset(pt, 0, PAGE_SIZE);
+    } else {
+        u64 pt_phys = pd->entries[pd_index] & 0x000FFFFFFFFFF000;
+        pt = (page_table_t*)(pt_phys + hpr->offset);
+    }
+
+    // Map the page
+    pt->entries[pt_index] = (physical_addr & 0x000FFFFFFFFFF000) | flags;
+
+    // Invalidate TLB entry
+    __asm__ volatile("invlpg (%0)" : : "r" (virtual_addr) : "memory");
+}
+
+u64* paging_get_physical_address(u64 virtual_addr)
+{
+    if (!kernel_pml4) return NULL;
+
+    u64 pml4_index = (virtual_addr >> 39) & 0x1FF;
+    u64 pdp_index  = (virtual_addr >> 30) & 0x1FF;
+    u64 pd_index   = (virtual_addr >> 21) & 0x1FF;
+    u64 pt_index   = (virtual_addr >> 12) & 0x1FF;
+    u64 page_offset = virtual_addr & 0xFFF;
+
+    if (!(kernel_pml4->entries[pml4_index] & PTE_PRESENT)) return NULL;
+    u64 pdpt_phys = kernel_pml4->entries[pml4_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pdpt = (page_table_t*)(pdpt_phys + hhdm_offset);
+
+    if (!(pdpt->entries[pdp_index] & PTE_PRESENT)) return NULL;
+    u64 pd_phys = pdpt->entries[pdp_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pd = (page_table_t*)(pd_phys + hhdm_offset);
+
+    if (!(pd->entries[pd_index] & PTE_PRESENT)) return NULL;
+    u64 pt_phys = pd->entries[pd_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pt = (page_table_t*)(pt_phys + hhdm_offset);
+
+    if (!(pt->entries[pt_index] & PTE_PRESENT)) return NULL;
+    u64 phys_addr = (pt->entries[pt_index] & 0x000FFFFFFFFFF000) | page_offset;
+
+    return (u64*)phys_addr;
+}
+
+void paging_unmap_page(u64 virtual_addr)
+{
+    if (!kernel_pml4) return;
+
+    u64 pml4_index = (virtual_addr >> 39) & 0x1FF;
+    u64 pdp_index  = (virtual_addr >> 30) & 0x1FF;
+    u64 pd_index   = (virtual_addr >> 21) & 0x1FF;
+    u64 pt_index   = (virtual_addr >> 12) & 0x1FF;
+
+    if (!(kernel_pml4->entries[pml4_index] & PTE_PRESENT)) return;
+    u64 pdpt_phys = kernel_pml4->entries[pml4_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pdpt = (page_table_t*)(pdpt_phys + hhdm_offset);
+
+    if (!(pdpt->entries[pdp_index] & PTE_PRESENT)) return;
+    u64 pd_phys = pdpt->entries[pdp_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pd = (page_table_t*)(pd_phys + hhdm_offset);
+
+    if (!(pd->entries[pd_index] & PTE_PRESENT)) return;
+    u64 pt_phys = pd->entries[pd_index] & 0x000FFFFFFFFFF000;
+    page_table_t *pt = (page_table_t*)(pt_phys + hhdm_offset);
+
+    if (!(pt->entries[pt_index] & PTE_PRESENT)) return;
+
+    pt->entries[pt_index] = 0;
+
+    __asm__ volatile("invlpg (%0)" : : "r" (virtual_addr) : "memory");
+}
+
+/// Summary
+/// 2025/11/17 tsaraki
+/// limine already done paging
+/// just paging for kernel heap
+/// @Question: paging for drivers, io, etc?
+void paging_init(limine_hhdm_response_t *hpr) {
+    u64 current_cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r" (current_cr3));
+
+    hhdm_offset = hpr->offset;
+
+    if (HEAP_START >= hhdm_offset && HEAP_START < hhdm_offset + 0x1000000000ULL) {
+        panic("PAGING: HEAP_START overlaps HHDM window!");
+    }
+
+    kernel_pml4 = (page_table_t*)((current_cr3 & 0x000FFFFFFFFFF000) + hpr->offset);
+
+    u64 heap_frames_len = (HEAP_SIZE / PAGE_SIZE);
+
+    u64 phys = physmem_alloc_to(heap_frames_len);
+    if  (!phys) panic("ERROR: Could not allocate physmem for heap");
+
+    printf("[PAGING] heap backing: phys=0x%llx - 0x%llx (frames %llu - %llu)\n",
+           phys, phys + heap_frames_len * PAGE_SIZE,
+           phys / PAGE_SIZE, phys / PAGE_SIZE + heap_frames_len - 1);
+
+    for (u64 i = 0; i < heap_frames_len; i++) {
+        u64 virt = HEAP_START + (i * PAGE_SIZE);
+        paging_map_page(hpr, virt, phys + (i * PAGE_SIZE), PTE_PRESENT | PTE_WRITABLE);
+    }
+
+    return;
+}
+
+page_table_t *paging_get_kernel_pml4(void)
+{
+    return kernel_pml4;
+}
+
+u64 paging_get_hhdm_offset(void)
+{
+    return hhdm_offset;
+}
+
+void paging_map_page_in(u64 pml4_phys, u64 virtual_addr, u64 physical_addr, u64 flags)
+{
+    u64 pml4_index = (virtual_addr >> 39) & 0x1FF;
+    u64 pdp_index  = (virtual_addr >> 30) & 0x1FF;
+    u64 pd_index   = (virtual_addr >> 21) & 0x1FF;
+    u64 pt_index   = (virtual_addr >> 12) & 0x1FF;
+
+    page_table_t *pml4 = (page_table_t *)(pml4_phys + hhdm_offset);
+
+    page_table_t *pdpt = NULL;
+    if (!(pml4->entries[pml4_index] & PTE_PRESENT))
+    {
+        u64 pdpt_phys = physmem_alloc_to(1);
+        if (!pdpt_phys) panic("paging_map_page_in: could not allocate PDPT");
+
+        pml4->entries[pml4_index] = (pdpt_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+        pdpt = (page_table_t *)(pdpt_phys + hhdm_offset);
+        memset(pdpt, 0, PAGE_SIZE);
+    }
+    else
+    {
+        pdpt = (page_table_t *)((pml4->entries[pml4_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+    }
+
+    page_table_t *pd = NULL;
+    if (!(pdpt->entries[pdp_index] & PTE_PRESENT))
+    {
+        u64 pd_phys = physmem_alloc_to(1);
+        if (!pd_phys) panic("paging_map_page_in: could not allocate PD");
+
+        pdpt->entries[pdp_index] = (pd_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+        pd = (page_table_t *)(pd_phys + hhdm_offset);
+        memset(pd, 0, PAGE_SIZE);
+    }
+    else
+    {
+        pd = (page_table_t *)((pdpt->entries[pdp_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+    }
+
+    page_table_t *pt = NULL;
+    if (!(pd->entries[pd_index] & PTE_PRESENT))
+    {
+        u64 pt_phys = physmem_alloc_to(1);
+        if (!pt_phys) panic("paging_map_page_in: could not allocate PT");
+
+        pd->entries[pd_index] = (pt_phys & 0x000FFFFFFFFFF000) | PTE_PRESENT | PTE_WRITABLE | PTE_USER;
+        pt = (page_table_t *)(pt_phys + hhdm_offset);
+        memset(pt, 0, PAGE_SIZE);
+    }
+    else
+    {
+        pt = (page_table_t *)((pd->entries[pd_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+    }
+
+    pt->entries[pt_index] = (physical_addr & 0x000FFFFFFFFFF000) | flags;
+
+    __asm__ volatile("invlpg (%0)" : : "r" (virtual_addr) : "memory");
+}
+
+void paging_unmap_page_in(u64 pml4_phys, u64 virtual_addr)
+{
+    u64 pml4_index = (virtual_addr >> 39) & 0x1FF;
+    u64 pdp_index  = (virtual_addr >> 30) & 0x1FF;
+    u64 pd_index   = (virtual_addr >> 21) & 0x1FF;
+    u64 pt_index   = (virtual_addr >> 12) & 0x1FF;
+
+    page_table_t *pml4 = (page_table_t *)(pml4_phys + hhdm_offset);
+
+    if (!(pml4->entries[pml4_index] & PTE_PRESENT)) return;
+    page_table_t *pdpt = (page_table_t *)((pml4->entries[pml4_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+    if (!(pdpt->entries[pdp_index] & PTE_PRESENT)) return;
+    page_table_t *pd = (page_table_t *)((pdpt->entries[pdp_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+    if (!(pd->entries[pd_index] & PTE_PRESENT)) return;
+    page_table_t *pt = (page_table_t *)((pd->entries[pd_index] & 0x000FFFFFFFFFF000) + hhdm_offset);
+
+    if (!(pt->entries[pt_index] & PTE_PRESENT)) return;
+
+    pt->entries[pt_index] = 0;
+
+    __asm__ volatile("invlpg (%0)" : : "r" (virtual_addr) : "memory");
+}

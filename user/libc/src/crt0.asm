@@ -1,13 +1,10 @@
 ;
 ; SPDX-License-Identifier: GPL-3.0-or-later
 ;
-; Copyright (c) 2026 doccrLabs
+; Copyright (c) 2026 sulfurLabs
 ;
-; PROJECT: doccrOS userspace
+; PROJECT: sulfurOS
 ; FILE: printf.c
-; CREATED BY: emex
-; MODIFIED BY: --
-;
 ;
 
 [BITS 64]

@@ -1,18 +1,14 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (c) 2026 doccrLabs
+# Copyright (c) 2026 sulfurLabs
 #
-# PROJECT: doccrOS
+# PROJECT: sulfurOS
 # FILE: common.mk
-# CREATED BY: emex
-# MODIFIED BY: --
-#
 #
 
-OS_NAME ?= doccrOS
+OS_NAME ?= sulfurOS
 ARCH ?= x86_64
-ARCH_DIR := doccr/kernel/arch/$(ARCH)
 ARCH_UPPER := $(shell echo $(ARCH) | tr a-z A-Z)
 
 # Build toolchain
@@ -34,7 +30,7 @@ else ifeq ($(ARCH),aarch64)
 ARCH_FLAGS := -mgeneral-regs-only -mcmodel=large
 endif
 
-COMMON_FLAGS += -I $(INCLUDE_DIR) -I $(SRC_DIR) -I doccr/ -I doccr/kernel/ \
+COMMON_FLAGS += -I $(INCLUDE_DIR) -I $(SRC_DIR) -I phosphor/ -I $(SRC_DIR)/kernel/ \
                 -I $(ARCH_DIR) \
                 -ffreestanding -fno-stack-protector -fno-lto \
                 -fno-PIE -fno-pic $(ARCH_FLAGS) \
@@ -46,9 +42,9 @@ LDFLAGS ?= -nostdlib -static -no-pie -z text -z max-page-size=0x1000
 ASFLAGS ?= -f elf64
 
 # Directories and files
-SRC_DIR := doccr
+SRC_DIR := phosphor
 USERSPACE_DIR = user
-ARCH_DIR := doccr/kernel/arch/$(ARCH)
+ARCH_DIR := phosphor/kernel/arch/$(ARCH)
 USERSPACE_BUILD = build/userspace
 BUILD_DIR := build
 DISK_DIR := dsk

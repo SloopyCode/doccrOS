@@ -1,3 +1,13 @@
+/*
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Copyright (c) 2026 sulfurLabs
+ *
+ * PROJECT: sulfurOS
+ * FILE: stdarg.h
+ *
+ */
+
 #ifndef _STDARG_H
 #define _STDARG_H
 

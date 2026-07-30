@@ -1,13 +1,10 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# Copyright (c) 2026 doccrLabs
+# Copyright (c) 2026 sulfurLabs
 #
-# PROJECT: doccrOS
+# PROJECT: sulfurOS
 # FILE: Makefile
-# CREATED BY: emex
-# MODIFIED BY: Offihito
-#
 #
 
 include common.mk
@@ -18,7 +15,7 @@ LIMINE_TOOL := $(LIMINE_DIR)/limine
 # Find all C, C++ and Assembly files
 COMMON_SRCS := $(shell find $(SRC_DIR) -path "$(SRC_DIR)/kernel/arch" -prune -o \
                \( -name "*.c" -or -name "*.cpp" -or -name "*.asm" \) -print)
-ARCH_SRCS := $(shell find $(ARCH_DIR) -name "*.c" -or -name "*.cpp" -or -name "*.asm")
+ARCH_SRCS := $(shell find $(ARCH_DIR) \( -name "*.c" -o -name "*.cpp" -o -name "*.asm" \) -print)
 
 SRCS = $(COMMON_SRCS) $(ARCH_SRCS)
 OBJS = $(SRCS:%=$(BUILD_DIR)/%.o)
@@ -69,11 +66,12 @@ $(BUILD_DIR)/kernel.elf: $(ARCH_DIR)/linker.ld $(OBJS)
 	$(VLD) $(LDFLAGS) -T $< $(OBJS) -o $@
 
 # Create bootable ISO
-$(ISO): limine.conf doom-wad-check build_num $(BUILD_DIR)/kernel.elf disk userspace
+$(ISO): limine.conf $(LIMINE_TOOL) doom-wad-check build_num $(BUILD_DIR)/kernel.elf disk userspace
 	@echo "[ISO] Creating bootable image..."
 	@rm -rf $(ISODIR)
 	@mkdir -p $(ISODIR)/boot/limine $(ISODIR)/EFI/BOOT
 	@cp $(BUILD_DIR)/kernel.elf $(ISODIR)/boot/kernel_a.elf
+	@cp $(BUILD_DIR)/kernel.elf $(ISODIR)/boot/kernel_b.elf
 	@cp $< $(ISODIR)/boot/limine/
 	@cp $(addprefix $(INCLUDE_DIR)/limine/limine-, bios.sys bios-cd.bin uefi-cd.bin) $(ISODIR)/boot/limine/
 	@cp $(addprefix $(INCLUDE_DIR)/limine/BOOT, IA32.EFI X64.EFI) $(ISODIR)/EFI/BOOT/
@@ -82,6 +80,7 @@ $(ISO): limine.conf doom-wad-check build_num $(BUILD_DIR)/kernel.elf disk usersp
 	@cp $(USERSPACE_DIR)/bin/hello/hello.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/doomgeneric/doomgeneric.elf $(DISK_DIR)/rd/bin/
 	@cp $(USERSPACE_DIR)/bin/poweroff/poweroff.elf $(DISK_DIR)/rd/bin/
+	@cp $(USERSPACE_DIR)/bin/reboot/reboot.elf $(DISK_DIR)/rd/bin/
 	@cp "$(DOOM_WAD)" $(DISK_DIR)/rd/doom1.wad
 
 	@echo "[MK] creating initrd.cpio..."

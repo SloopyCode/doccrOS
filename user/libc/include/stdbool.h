@@ -1,12 +1,10 @@
 /*
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Copyright (c) 2026 doccrLabs
+ * Copyright (c) 2026 sulfurLabs
  *
- * PROJECT: doccrOS
+ * PROJECT: sulfurOS
  * FILE: stdbool.h
- * CREATED BY: Offihito
- * MODIFIED BY: --
  *
  */
 

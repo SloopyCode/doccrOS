@@ -1,6 +1,6 @@
-#                doccrOS Attribution Requirements
+#                sulfurOS Attribution Requirements
 
-This project is licensed under the GNU GPLv3, and is known as **doccrOS**.
+This project is licensed under the GNU GPLv3, and is known as **sulfurOS**.
 
 ## Permitted Actions
 
@@ -16,7 +16,7 @@ You are **explicitly permitted** to:
 
 ## **Attribution Condition**
 
-All modified or redistributed versions **must** include a clear notice that the work is based on **doccrOS**.
+All modified or redistributed versions **must** include a clear notice that the work is based on **sulfurOS**.
 
 ### The attribution notice **must**:
 - Be visible and easily found by users
@@ -26,7 +26,7 @@ All modified or redistributed versions **must** include a clear notice that the 
     - The system information (in userspace or kernel)
     - Any user-facing documentation
 
-- It always needs to contain the name **"doccrOS"** in any place in the project
+- It always needs to contain the name **"sulfurOS"** in any place in the project
 
 ---
 

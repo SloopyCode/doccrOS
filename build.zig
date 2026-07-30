@@ -1,13 +1,11 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Copyright (c) 2026 doccrLabs
+// Copyright (c) 2026 sulfurLabs
 //
-// PROJECT: doccrOS
-// FILE: kernel.c
-// CREATED BY: tsaraki
-// MODIFIED BY: --
-//
+// PROJECT: sulfurOS
+// FILE: build.zig
+// CREDITS: tsaraki
 //
 const std = @import("std");
 
@@ -211,7 +209,7 @@ pub fn build(b: *std.Build) !void {
     const isoBuildStep = b.step("ISO BUILD", "create iso file");
 
     const isoDir = "zig-out/iso";
-    const isoName = "zig-out/emexos.iso";
+    const isoName = "zig-out/sulfuros.iso";
     const kernelPath = "zig-out/bin/kernel.elf";
 
     const isoClean = b.addRemoveDirTree(b.path(isoDir));

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 BUILD_FILE=".build"
-OUT_FILE="doccr/build.h"
+OUT_FILE="phosphor/build.h"
 
 # build nummer
 if [ -f "$BUILD_FILE" ]; then
@@ -41,7 +41,7 @@ echo "[BUILDGEN] build = $BUILD"
 # header schreiben
 cat > "$OUT_FILE" <<EOF
 #pragma once
-// this file will always be regenerated when building emexOS
+// this file will always be regenerated when building sulfurOS
 // if you want to disable it goto /tools/genbuild.sh
-#define ___EMEX_BUILD "$BUILD"
+#define ___SULF_BUILD "$BUILD"
 EOF
