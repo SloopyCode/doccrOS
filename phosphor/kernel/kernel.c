@@ -46,6 +46,7 @@
 
 // File system
 #include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/vfs/procfs.h>
 
 // User
 #include <kernel/user/init.h>
@@ -109,6 +110,8 @@ void _start(void)
     vfs_init();
     rootfs_init();
     vfs_dump();
+
+    procfs_init();
 
     devices_init();
     kernel_devices_init();

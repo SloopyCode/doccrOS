@@ -84,7 +84,7 @@ static i64 shm_ioctl(void *handle, u64 request, void *arg)
     shm_ioctl_args_t args;
     memcpy(&args, arg, sizeof(args));
 
-    proc_t *p = h->owner;
+    proc_t *p = process_get_current();
     if (!p || !p->space) return -1;
 
     switch (request)

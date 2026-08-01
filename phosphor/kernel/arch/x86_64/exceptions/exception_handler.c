@@ -54,8 +54,6 @@ void exception_handler(cpu_state_t *state)
 {
 	if ((state->cs & 3) == 3)
     {
-        __asm__ volatile("cli");
-
         thread_t *t = thread_get_current();
         proc_t *p   = t ? t->owner: NULL;
 
@@ -77,15 +75,17 @@ void exception_handler(cpu_state_t *state)
         if (t)
         {
             t->state = THREAD_DEAD;
+            if (p && p->alive_count > 0) p->alive_count--;
         }
 
-        if (p)
+        if (p && p->state == PROC_ALIVE)
         {
             process_exit(p, 128 + (int)state->int_no);
         }
 
         sched_yield();
 
+        __asm__ volatile("sti");
         for (;;) __asm__ volatile("hlt");
     }
 

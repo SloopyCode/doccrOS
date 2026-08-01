@@ -12,6 +12,7 @@
 
 #include <kernel/proc/process.h>
 #include <kernel/proc/thread.h>
+#include <kernel/proc/scheduler.h>
 #include <kernel/mem/vmm/vmm.h>
 #include <kernel/mem/meminclude.h>
 #include <kernel/mem/paging/paging.h>
@@ -408,14 +409,39 @@ static u64 setup_initial_stack(vmm_space_t *space, const char *prog_name)
     return sp;
 }
 
+static void kill_sibling_threads(proc_t *p, thread_t *caller)
+{
+    thread_t *t = p->threads;
+    while (t)
+    {
+        thread_t *next = t->proc_next;
+
+        if (t != caller && t->state != THREAD_DEAD)
+        {
+            t->state = THREAD_DEAD;
+            if (p->alive_count > 0) p->alive_count--;
+
+            sched_remove(t);
+        }
+
+        t = next;
+    }
+}
+
 int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name)
 {
     if (!p || !state || !data || size == 0) return -1;
     if (elf_check(data, size) != 0) return -1;
 
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     const elf64_ehdr_t *eh = (const elf64_ehdr_t *)data;
 
     printf("[ELF] execve replacing '%s' image with '%s'\n", p->name, name ? name : "?");
+
+    thread_t *self = thread_get_current();
+    kill_sibling_threads(p, self);
 
     vmm_region_t *cur = p->space->regions;
     while (cur)
@@ -429,6 +455,7 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     if (elf_map_segments_and_stack(p, data, size, eh, &entry) != 0)
     {
         printf("[ELF] execve: mapping new image failed, address space is gone\n");
+        __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
         return -1;
     }
 
@@ -439,18 +466,17 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     }
     p->name[i] = '\0';
 
-    thread_t *t = thread_get_current();
-    if (t)
+    if (self)
     {
         int k  = 0;
         while (
         	name[k] &&
          	k < THREAD_NAME_MAX - 1
         ) {
-        	t->name[k] = name[k];
+        	self->name[k] = name[k];
          	k++;
         }
-        t->name[k] = '\0';
+        self->name[k] = '\0';
     }
 
     p->heap_break = 0;
@@ -459,6 +485,7 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     if (!stack_top)
     {
         printf("[ELF] execve, setup initial stack '%s'\n", name);
+        __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
         return -1;
     }
 
@@ -482,6 +509,8 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     state->r15    = 0;
 
     log("[ELF]", "execve replaced process image\n", success);
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 
     return 0;
 }

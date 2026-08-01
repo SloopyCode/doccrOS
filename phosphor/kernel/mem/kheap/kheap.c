@@ -78,6 +78,9 @@ u64 *kmalloc(u64 size) {
 
     size = (size + 7) & ~7;
 
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     kheap_block_t *current = kheap_start;
     kheap_block_t *best_fit = NULL;
 
@@ -89,7 +92,10 @@ u64 *kmalloc(u64 size) {
         current = current->next;
     }
 
-    if (best_fit == NULL) return NULL;
+    if (best_fit == NULL) {
+        __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+        return NULL;
+    }
 
     if (best_fit->size >= size + sizeof(kheap_block_t) + 16) {
         kheap_block_t *new_block = (kheap_block_t *)((u8 *)best_fit + sizeof(kheap_block_t) + size);
@@ -117,21 +123,30 @@ u64 *kmalloc(u64 size) {
     kheap_stats.free_size -= best_fit->size;
     kheap_stats.used_blocks++;
 
-    return (u64 *)((u8 *)best_fit + sizeof(kheap_block_t));
+    u64 *result = (u64 *)((u8 *)best_fit + sizeof(kheap_block_t));
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+
+    return result;
 }
 
 void kfree(u64 *ptr) {
   if (ptr == NULL) return;
 
+  u64 saved_flags;
+  __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
   kheap_block_t *blk = (kheap_block_t *) ((u8 *)ptr - sizeof(kheap_block_t));
 
   if (blk->magic != BLOCK_MAGIC) {
       //printf("\n\nERROR: kernel invalid blk! Doube free?\n");
+      __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
       return;
   }
 
   if (!blk->used) {
       //printf("\n WARNING: Block already freed\n");
+      __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
       return;
   }
 
@@ -141,6 +156,8 @@ void kfree(u64 *ptr) {
   kheap_stats.used_blocks--;
 
   kheap_merge_free_blocks(blk);
+
+  __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 }
 
 

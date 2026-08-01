@@ -13,6 +13,8 @@ all:
 	@$(MAKE) -C bin/doomgeneric
 	@$(MAKE) -C bin/poweroff
 	@$(MAKE) -C bin/reboot
+	@$(MAKE) -C bin/template
+	@$(MAKE) -C bin/welcome
 
 clean:
 	@$(MAKE) -C libc clean
@@ -20,5 +22,7 @@ clean:
 	@$(MAKE) -C bin/doomgeneric clean
 	@$(MAKE) -C bin/poweroff clean
 	@$(MAKE) -C bin/reboot clean
+	@$(MAKE) -C bin/template clean
+	@$(MAKE) -C bin/welcome clean
 
 .PHONY: all clean

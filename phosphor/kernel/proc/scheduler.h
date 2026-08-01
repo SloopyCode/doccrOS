@@ -16,7 +16,7 @@
 
 thread_t *sched_current(void);
 
-#define SCHED_MAX_THREADS 64
+#define SCHED_MAX_THREADS 256
 
 void sched_init(void);
 void sched_enable(void);

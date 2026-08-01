@@ -67,4 +67,5 @@ void user_start(void)
     load_elf(DESKTOP_PATH, DESKTOP_NAME, CAP_FRAMEBUFFER);
     //load_elf(DOOM_PATH, DOOM_NAME, CAP_FRAMEBUFFER);
     //load_elf("/emr/login.elf", "login.elf", CAP_FRAMEBUFFER);
+    //load_elf("/system/desktop/welcome.elf", "welcome.elf", 0);
 }

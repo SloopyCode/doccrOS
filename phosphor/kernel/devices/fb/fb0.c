@@ -78,10 +78,11 @@ static void fb0_close(void *handle)
     fb_handle_t *h = (fb_handle_t *)handle;
     if (!h) return;
 
+    proc_t *p = process_get_current();
     // dont leave the mapping aftr close
-    if (h->mapped  && h->owner && h->owner->space)
+    if (h->mapped && p && p->space)
     {
-        vmm_unmap_phys(h->owner->space, h->vaddr);
+        vmm_unmap_phys(p->space, h->vaddr);
     }
 
     kfree((u64 *)h);
@@ -119,7 +120,8 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
         case FB_IOCTL_MAP:
         {
             if (!arg) return -1;
-            if (!h->owner || !h->owner->space) return -1;
+            proc_t *p = process_get_current();
+            if (!p || !p->space) return -1;
 
             //if already mapped
             // just hand back the same vaddr instead of mapping twive
@@ -137,7 +139,7 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
             u64 page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
             u64 vaddr = vmm_map_phys(
-                h->owner->space,
+                p->space,
                 FB_MAP_VADDR,
                 phys,
                 page_count,

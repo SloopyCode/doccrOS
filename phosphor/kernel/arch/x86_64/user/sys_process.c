@@ -104,9 +104,18 @@ void sys_execve(cpu_state_t *state)
     if (elf_exec_replace(p, state, node->data, node->size, name_buf) != 0)
     {
         printf("[SYS_EXECVE] exec of '%s' failed, killing pid=%llu\n", path_buf, p->pid);
+
+        thread_t *self = thread_get_current();
+        if (self)
+        {
+            self->state = THREAD_DEAD;
+            if (p->alive_count > 0) p->alive_count--;
+        }
         process_exit(p, 1);
         sched_yield();
-        state->rax = (u64)-1;
+
+        __asm__ volatile("sti");
+        for (;;) __asm__ volatile("hlt");
     }
 }
 

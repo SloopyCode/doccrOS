@@ -292,6 +292,9 @@ proc_t *process_fork(cpu_state_t *parent_state)
     proc_t *child = proc_alloc(parent->name);
     if (!child) return NULL;
 
+    child->capabilities = parent->capabilities;
+    memcpy(child->fd_table, parent->fd_table, sizeof(parent->fd_table));
+
     child->space = vmm_clone_space(parent->space);
     if (!child->space)
     {

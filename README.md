@@ -1,8 +1,6 @@
 <div align="center">
 	<h1> doccrOS </h1>
-
 a simple x86_64 Operating System in C made from scratch
-
 	<div>
 		<img src="screenshots/screenshot1.png" width="23%" />
 		<img src="screenshots/screenshot2.png" width="23%" />

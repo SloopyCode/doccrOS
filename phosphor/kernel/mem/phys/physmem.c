@@ -243,6 +243,9 @@ void physmem_init(limine_memmap_response_t *mpr, limine_hhdm_response_t *hpr) {
 u64 physmem_alloc_to(u64 count) { //count is len of frames of size 4096
     if (count == 0) return 0;
 
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     u64 consecutive = 0;
     u64 start_frame = 0;
     u8  all_free = 0;
@@ -263,13 +266,17 @@ u64 physmem_alloc_to(u64 count) { //count is len of frames of size 4096
         }
     }
 
+    u64 result = 0;
+
     if (all_free) {
         u64 physmem_addr = start_frame * PAGE_SIZE;
         physmem_addr_mark_used(physmem_addr, count);
-        return physmem_addr;
+        result = physmem_addr;
     }
 
-    return 0;
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+
+    return result;
 }
 
 /// Summary
@@ -282,7 +289,12 @@ void physmem_free_to(u64 physmem_addr, u64 count) { //count is len of frames of 
     if (count == 0) return;
 
    // u64 frame_start = physmem_addr / PAGE_SIZE;
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     physmem_addr_mark_free(physmem_addr, count );
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 }
 
 /// Summary
@@ -299,27 +311,55 @@ u64 physmem_free_get(void) {
 }
 
 void physmem_frame_rc_inc(u64 phys_addr) {
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     u64 frame = phys_addr / PAGE_SIZE;
-    if (frame >= physmem_total) return;
-    physmem_pageframes[frame].rc++;
+    if (frame < physmem_total) {
+        physmem_pageframes[frame].rc++;
+    }
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 }
 
 u32 physmem_frame_rc_dec_and_get(u64 phys_addr) {
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     u64 frame = phys_addr / PAGE_SIZE;
-    if (frame >= physmem_total) return 0;
-    if (physmem_pageframes[frame].rc > 0)
-        physmem_pageframes[frame].rc--;
-    return physmem_pageframes[frame].rc;
+    u32 result = 0;
+    if (frame < physmem_total) {
+        if (physmem_pageframes[frame].rc > 0)
+            physmem_pageframes[frame].rc--;
+        result = physmem_pageframes[frame].rc;
+    }
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+    return result;
 }
 
 u32 physmem_frame_flags_get(u64 phys_addr) {
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     u64 frame = phys_addr / PAGE_SIZE;
-    if (frame >= physmem_total) return 0;
-    return physmem_pageframes[frame].flags;
+    u32 result = 0;
+    if (frame < physmem_total) {
+        result = physmem_pageframes[frame].flags;
+    }
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+    return result;
 }
 
 void physmem_frame_flags_set(u64 phys_addr, u32 flags) {
+    u64 saved_flags;
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
+
     u64 frame = phys_addr / PAGE_SIZE;
-    if (frame >= physmem_total) return;
-    physmem_pageframes[frame].flags = flags;
+    if (frame < physmem_total) {
+        physmem_pageframes[frame].flags = flags;
+    }
+
+    __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 }

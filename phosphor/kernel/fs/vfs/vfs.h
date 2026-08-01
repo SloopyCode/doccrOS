@@ -19,6 +19,8 @@
 #define VFS_MAX_PATH      256
 
 
+#define PROCFS_MAX_ENTRIES 32
+
 #define ROOT "/"
 
 struct device_handler;

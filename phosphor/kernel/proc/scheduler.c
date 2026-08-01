@@ -176,6 +176,8 @@ u64 sched_get_switch_count(void) { return switch_count; }
 void sched_yield(void) {
     if (!enabled) return;
 
+    __asm__ volatile("cli");
+
     reap_zombies();
     process_reap_zombies();
 
