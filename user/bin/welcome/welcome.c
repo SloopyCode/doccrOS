@@ -48,9 +48,10 @@ static void draw_ui(void)
     ) {
         ui16_label(
             style(
-                font(fontBold)
+                font(fontBold),
+                color(FG_COLOR)
             ),
-            "Welcome to emexOS!"
+            "Welcome to sulfurOS!"
         );
 
         ui16_container(
@@ -63,28 +64,32 @@ static void draw_ui(void)
 
         ui16_label(
             style(
-                font(fontRegular)
+                font(fontRegular),
+                color(FG_COLOR)
             ),
-            "emexOS is a small graphical operating system entirely"
+            "sulfurOS is a small graphical operating system entirely"
         );
 
         ui16_label(
             style(
-                font(fontRegular)
+                font(fontRegular),
+                color(FG_COLOR)
             ),
             "written from scratch in C by emex and all its contributors."
         );
 
         ui16_label(
             style(
-                font(fontRegular)
+                font(fontRegular),
+                color(FG_COLOR)
             ),
             "It's designed for customizers who want to fully change the"
         );
 
         ui16_label(
             style(
-                font(fontRegular)
+                font(fontRegular),
+                color(FG_COLOR)
             ),
             "look of their system and love retro with a modern touch."
         );
@@ -97,7 +102,8 @@ static void draw_ui(void)
 
         ui16_label(
             style(
-                font(fontRegular)
+                font(fontRegular),
+                color(FG_COLOR)
             ),
             "Have fun exploring the system!"
         );
@@ -116,7 +122,8 @@ static void draw_ui(void)
 
             ui16_label(
                 style(
-                    font(fontBold)
+                    font(fontBold),
+                    color(ACCENT_COLOR)
                 ),
                 "~sulfurLabs"
             );
