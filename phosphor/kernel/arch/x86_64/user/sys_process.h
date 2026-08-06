@@ -19,6 +19,7 @@ void sys_yield(cpu_state_t *state);
 void sys_getpid(cpu_state_t *state);
 void sys_fork(cpu_state_t *state);
 void sys_execve(cpu_state_t *state);
+void sys_spawn(cpu_state_t *state);
 void sys_waitpid(cpu_state_t *state);
 void sys_getuid(cpu_state_t *state);
 void sys_getgid(cpu_state_t *state);

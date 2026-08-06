@@ -36,9 +36,7 @@
 #define SYS_GETGID        104
 #define SYS_REBOOT        169
 #define SYS_CLOCK_GETTIME 228
-// TODO:
-// SYS_EXEC, SYS_SPAWN then here exec/spawn path.
-// dont forget the CAP system then!!
+#define SYS_SPAWN         400
 
 #define MSR_EFER       0xC0000080
 #define MSR_STAR       0xC0000081

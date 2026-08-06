@@ -89,6 +89,7 @@ void syscall_dispatch(cpu_state_t *state)
 	    case SYS_BRK:          sys_brk(state);          break;
 	    case SYS_FORK:         sys_fork(state);         break;
 		case SYS_EXECVE:       sys_execve(state);       break;
+		case SYS_SPAWN:        sys_spawn(state);        break;
 	    case SYS_EXIT:         sys_exit(state);         break;
 	    case SYS_YIELD:        sys_yield(state);        break;
 	    case SYS_GETPID:       sys_getpid(state);       break;

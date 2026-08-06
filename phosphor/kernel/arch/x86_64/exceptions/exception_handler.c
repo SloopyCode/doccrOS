@@ -62,12 +62,18 @@ void exception_handler(cpu_state_t *state)
             : "Unknown Exception"
         ;
 
+        u64 cr2 = 0;
+        u64 cr3 = 0;
+        if (state->int_no == 14) __asm__ volatile("mov %%cr2, %0; mov %%cr3, %1" : "=r"(cr2), "=r"(cr3));
+
         printf(
-            "[EXC] userspace fault: '%s' int=%llu err=%llu rip=0x%llx proc='%s' pid=%llu ; killing process\n",
+            "[EXC] userspace fault: '%s' int=%llu err=%llu rip=0x%llx cr2=0x%llx cr3=0x%llx proc='%s' pid=%llu ; killing process\n",
             msg,
             state->int_no,
             state->err_code,
             state->rip,
+            cr2,
+            cr3,
             p ? p->name : "?",
             p ? p->pid  : 0
         );

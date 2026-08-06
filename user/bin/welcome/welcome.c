@@ -83,7 +83,7 @@ static void draw_ui(void)
                 font(fontRegular),
                 color(FG_COLOR)
             ),
-            "It's designed for customizers who want to fully change the"
+            "It's designed for users who want to fully customize the"
         );
 
         ui16_label(

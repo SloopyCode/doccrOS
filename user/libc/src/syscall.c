@@ -91,7 +91,7 @@ void yield(void)
 __attribute__((noreturn)) void _exit(int code)
 {
     syscall3(SYS_EXIT, code, 0, 0);
-    for (;;) __asm__ volatile("hlt");
+    //for (;;) __asm__ volatile("hlt");
 }
 
 long lseek(int fd, long offset, int whence)
@@ -165,6 +165,11 @@ int clock_gettime(int clock_id, struct timespec *timespec)
 long execve(const char *path, char *const argv[], char *const envp[])
 {
     return syscall3(SYS_EXECVE, (long)path, (long)argv, (long)envp);
+}
+
+long spawn(const char *path)
+{
+    return syscall3(SYS_SPAWN, (long)path, 0, 0);
 }
 
 long reboot(int cmd)

@@ -43,13 +43,13 @@ void sys_getpid(cpu_state_t *state)
 
 void sys_fork(cpu_state_t *state)
 {
-    printf("[SYS_FORK] before: physmem_free=%llu kheap_free=%llu\n",
-           physmem_free_get(), kheap_get_free_size());
+    //printf("[SYS_FORK] before: physmem_free=%llu kheap_free=%llu\n",
+    //       physmem_free_get(), kheap_get_free_size());
 
     proc_t *child = process_fork(state);
 
-    printf("[SYS_FORK] after: physmem_free=%llu kheap_free=%llu result=%s\n",
-           physmem_free_get(), kheap_get_free_size(), child ? "OK" : "FAILED");
+    //printf("[SYS_FORK] after: physmem_free=%llu kheap_free=%llu result=%s\n",
+    //       physmem_free_get(), kheap_get_free_size(), child ? "OK" : "FAILED");
 
     state->rax = child ? child->pid : (u64)-1;
 }
@@ -117,6 +117,57 @@ void sys_execve(cpu_state_t *state)
         __asm__ volatile("sti");
         for (;;) __asm__ volatile("hlt");
     }
+}
+
+void sys_spawn(cpu_state_t *state)
+{
+    const char *path = (const char *)state->rdi;
+    char path_buf[VFS_MAX_PATH];
+    int i = 0;
+
+    if (!user_ptr_ok((u64)path))
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+    while (path[i] && i < VFS_MAX_PATH - 1)
+    {
+        path_buf[i] = path[i];
+        i++;
+    }
+    path_buf[i] = '\0';
+
+    vfs_node_t *node = vfs_find(path_buf);
+    if (!node || node->type != VFS_FILE || !node->data || node->size == 0)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    const char *base = path_buf;
+    char name_buf[64];
+    int j = 0;
+
+    for (const char *s = path_buf; *s; s++) if (*s == '/') base = s + 1;
+
+    while (base[j] && j < (int)sizeof(name_buf) - 1)
+    {
+        name_buf[j] = base[j];
+        j++;
+    }
+    name_buf[j] = '\0';
+
+    proc_t *parent = process_get_current();
+    u64 caps = parent ? parent->capabilities : 0;
+    u64 pid = 0;
+    if (elf_load(node->data, node->size, name_buf, caps, &pid) != 0)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    //printf("[SYS_SPAWN] launched '%s' pid=%llu\n", path_buf, pid);
+    state->rax = pid;
 }
 
 void sys_waitpid(cpu_state_t *state)

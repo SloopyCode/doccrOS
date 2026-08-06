@@ -1,29 +1,29 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Copyright (c) 2026 doccrLabs
+// Copyright (c) 2026 sulfurLabs
 //
-// PROJECT: doccrOS
-// FILE: .emxrc
-// CREATED BY: emex
-// MODIFIED BY: --
+// PROJECT: sulfurOS
+// FILE: .sulfrc
 //
 
 var gui = 1
 
-var desktop   = ("/system/desktop/desktop.elf")
-var login     = ("/system/desktop/login.elf")
-var welcome   = ("/system/welcome.elf")
+var desktop = ("/system/desktop/desktop.elf")
+var login   = ("/system/desktop/login.elf")
+var welcome = ("/system/welcome.elf")
+var system  = ("/system/desktop/system.elf")
 
 print("succesfully jumped into userspace... yay :3")
 
-wait 150
+wait 5
 
 if  gui
+    exec  system
 	exec  desktop
 	exec  login
 	exec  welcome
 else
-	print("[warning] gui not found")
+	print("[warning] gui not active")
 	exec shell_path
 endif

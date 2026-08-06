@@ -47,7 +47,7 @@ static void load_elf(const char *path, const char *name, u64 initial_caps)
 
     printf("[USER] found, load '%s' <%llu bytes>\n", path, node->size);
 
-    int rc = elf_load(node->data, node->size, name, initial_caps);
+    int rc = elf_load(node->data, node->size, name, initial_caps, NULL);
     if (rc != 0)
     {
         log("[USER]", "could not load binary...\n", warning);
@@ -67,5 +67,5 @@ void user_start(void)
     load_elf(DESKTOP_PATH, DESKTOP_NAME, CAP_FRAMEBUFFER);
     //load_elf(DOOM_PATH, DOOM_NAME, CAP_FRAMEBUFFER);
     //load_elf("/emr/login.elf", "login.elf", CAP_FRAMEBUFFER);
-    //load_elf("/system/desktop/welcome.elf", "welcome.elf", 0);
+    load_elf("/system/desktop/welcome.elf", "welcome.elf", 0);
 }

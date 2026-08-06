@@ -62,7 +62,7 @@ typedef struct
     u64     p_align;
 } __attribute__((packed)) elf64_phdr_t;
 
-int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps);
+int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *out_pid);
 int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name);
 
 #endif

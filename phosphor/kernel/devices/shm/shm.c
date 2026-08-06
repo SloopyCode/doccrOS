@@ -12,7 +12,10 @@
 #include "../names.h"
 #include <kernel/proc/process.h>
 #include <kernel/mem/meminclude.h>
+#include <kernel/mem/vmm/vmm.h>
 #include <kernel/screen/lib/log.h>
+#include <kernel/screen/lib/print.h>
+#include <kernel/communication/serial.h>
 
 #define SHM_MAX_SEGMENTS 64
 #define SHM_VADDR_BASE 0x0000700000000000ULL
@@ -144,12 +147,24 @@ static i64 shm_ioctl(void *handle, u64 request, void *arg)
             shm_segment_t *seg = find_segment(args.id);
             if (!seg) return -1;
 
+            u64 heap_before = vmm_space_get_phys(p->space, 0x50000000ULL);
+
             u64 vaddr = SHM_VADDR_BASE + (h->next_vaddr_slot++) * SHM_VADDR_STRIDE;
             u64 mapped = vmm_map_phys(
                 p->space, vaddr, seg->phys_base, seg->page_count,
                 VMM_REGION_USER | VMM_REGION_READ | VMM_REGION_WRITE
             );
             if (!mapped) return -1;
+
+            /*
+            printf(
+            	"[SHM_MAP] pid=%llu pml4=0x%llx heap500 before=0x%llx after=0x%llx shm=0x%llx\n",
+                p->pid,
+                p->space->pml4_phys,
+                heap_before,
+                vmm_space_get_phys(p->space, 0x50000000ULL),
+                mapped
+            );*/
 
             seg->refcount++;
 

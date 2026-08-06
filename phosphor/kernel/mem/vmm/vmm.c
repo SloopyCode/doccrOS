@@ -214,7 +214,7 @@ vmm_space_t *vmm_space_create(void)
         return NULL;
     }
 
-    printf("[VMM] new space PML4 frame=0x%llx\n", pml4_phys);
+    //printf("[VMM] new space PML4 frame=0x%llx\n", pml4_phys);
 
     u64 hhdm = paging_get_hhdm_offset();
     page_table_t *pml4_virt = (page_table_t *)(pml4_phys + hhdm);
@@ -339,8 +339,8 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
     u64 saved_flags;
     __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
 
-    printf("[VMM_FREE_DBG] enter space=%p pml4_phys=0x%llx vaddr=0x%llx\n",
-           (void*)space, space->pml4_phys, vaddr);
+    //printf("[VMM_FREE_DBG] enter space=%p pml4_phys=0x%llx vaddr=0x%llx\n",
+    //       (void*)space, space->pml4_phys, vaddr);
 
     vmm_region_t *cur = space->regions;
     while (cur)
@@ -351,8 +351,8 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
             u64 hhdm       = paging_get_hhdm_offset();
             u8  is_mmio    = (cur->flags & VMM_REGION_MMIO) != 0;
 
-            printf("[VMM_FREE_DBG] found region base=0x%llx size=0x%llx pages=%llu is_mmio=%d hhdm=0x%llx\n",
-                   cur->base, cur->size, page_count, is_mmio, hhdm);
+            //printf("[VMM_FREE_DBG] found region base=0x%llx size=0x%llx pages=%llu is_mmio=%d hhdm=0x%llx\n",
+            //       cur->base, cur->size, page_count, is_mmio, hhdm);
 
             for (u64 i = 0; i < page_count; i++)
             {
@@ -365,8 +365,8 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
 
                 page_table_t *pml4 = (page_table_t *)(space->pml4_phys + hhdm);
 
-                printf("[VMM_FREE_DBG] i=%llu va=0x%llx pml4=%p pml4_idx=%llu\n",
-                       i, va, (void*)pml4, pml4_idx);
+                //printf("[VMM_FREE_DBG] i=%llu va=0x%llx pml4=%p pml4_idx=%llu\n",
+                //       i, va, (void*)pml4, pml4_idx);
 
                 if (!(pml4->entries[pml4_idx] & PTE_PRESENT)) {
                     printf("[VMM_FREE_DBG] pml4 entry not present, skip\n");
@@ -375,8 +375,8 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
 
                 page_table_t *pdpt = (page_table_t *)((pml4->entries[pml4_idx] & 0x000FFFFFFFFFF000) + hhdm);
 
-                printf("[VMM_FREE_DBG] pdpt_phys=0x%llx pdpt_virt=%p pdp_idx=%llu\n",
-                       pml4->entries[pml4_idx] & 0x000FFFFFFFFFF000, (void*)pdpt, pdp_idx);
+                //printf("[VMM_FREE_DBG] pdpt_phys=0x%llx pdpt_virt=%p pdp_idx=%llu\n",
+                //       pml4->entries[pml4_idx] & 0x000FFFFFFFFFF000, (void*)pdpt, pdp_idx);
 
                 if (!(pdpt->entries[pdp_idx] & PTE_PRESENT)) {
                     printf("[VMM_FREE_DBG] pdpt entry not present, skip\n");
@@ -409,8 +409,8 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
 
                 page_table_t *pt = (page_table_t *)((pd->entries[pd_idx] & 0x000FFFFFFFFFF000) + hhdm);
 
-                printf("[VMM_FREE_DBG] pt_phys=0x%llx pt_virt=%p pt_idx=%llu\n",
-                       pd->entries[pd_idx] & 0x000FFFFFFFFFF000, (void*)pt, pt_idx);
+                //printf("[VMM_FREE_DBG] pt_phys=0x%llx pt_virt=%p pt_idx=%llu\n",
+                //       pd->entries[pd_idx] & 0x000FFFFFFFFFF000, (void*)pt, pt_idx);
 
                 if (!(pt->entries[pt_idx] & PTE_PRESENT)) {
                     printf("[VMM_FREE_DBG] pt entry not present, skip\n");
@@ -420,9 +420,9 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
                 if (!is_mmio)
                 {
                     u64 phys = pt->entries[pt_idx] & 0x000FFFFFFFFFF000;
-                    printf("[VMM_FREE_DBG] about to dec rc for phys=0x%llx\n", phys);
+                    //printf("[VMM_FREE_DBG] about to dec rc for phys=0x%llx\n", phys);
                     u32 rc = physmem_frame_rc_dec_and_get(phys);
-                    printf("[VMM_FREE_DBG] rc after dec=%u\n", rc);
+                   // printf("[VMM_FREE_DBG] rc after dec=%u\n", rc);
                     if (rc == 0)
                     {
                         physmem_frame_flags_set(phys, FRAME_FREE);
@@ -486,7 +486,7 @@ void vmm_space_free(vmm_space_t *space, u64 vaddr)
     printf("[VMM_FREE_DBG] vaddr not found in region list!\n");
 
 done:
-    printf("[VMM_FREE_DBG] leave\n");
+//printf("[VMM_FREE_DBG] leave\n");
     __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 }
 
@@ -547,12 +547,6 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
     vmm_region_t *src_cur = src->regions;
     while (src_cur)
     {
-        if (src_cur->flags & VMM_REGION_MMIO)
-        {
-            src_cur = src_cur->next;
-            continue;
-        }
-
         vmm_region_t *node = region_alloc();
         if (!node)
         {
@@ -563,29 +557,12 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
 
         node->base  = src_cur->base;
         node->size  = src_cur->size;
-        node->flags = (src_cur->flags | VMM_REGION_COW) & ~VMM_REGION_WRITE;
+        node->flags = src_cur->flags;
         node->prev  = NULL;
         node->next  = NULL;
 
         u64 page_count = src_cur->size / PAGE_SIZE;
-        u64 pte_flags  = flags_to_pte(node->flags) & ~PTE_WRITABLE;
-
-        for (u64 i = 0; i < page_count; i++)
-        {
-            u64 va   = src_cur->base + i * PAGE_SIZE;
-            u64 phys = pte_lookup(src, va);
-            if (!phys) continue;
-
-            physmem_frame_rc_inc(phys);
-            physmem_frame_flags_set(phys, physmem_frame_flags_get(phys) | FRAME_COW | FRAME_SHARED);
-
-            paging_map_page_in(dst->pml4_phys, va, phys, pte_flags);
-
-            u64 src_pte_flags = flags_to_pte(src_cur->flags) & ~PTE_WRITABLE;
-            paging_map_page_in(src->pml4_phys, va, phys, src_pte_flags);
-        }
-
-        src_cur->flags = (src_cur->flags | VMM_REGION_COW) & ~VMM_REGION_WRITE;
+        u64 pte_flags  = flags_to_pte(node->flags);
 
         vmm_region_t *prev = NULL;
         vmm_region_t *cur  = dst->regions;
@@ -602,6 +579,30 @@ vmm_space_t *vmm_clone_space(vmm_space_t *src)
 
         dst->region_count++;
         dst->used_virtual += node->size;
+
+        for (u64 i = 0; i < page_count; i++)
+        {
+            u64 va   = src_cur->base + i * PAGE_SIZE;
+            u64 phys = pte_lookup(src, va);
+            if (!phys) continue;
+
+            if (src_cur->flags & VMM_REGION_MMIO)
+            {
+                paging_map_page_in(dst->pml4_phys, va, phys, pte_flags);
+                continue;
+            }
+
+            u64 child_phys = physmem_alloc_to(1);
+            if (!child_phys)
+            {
+                __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
+                vmm_space_destroy(dst);
+                return NULL;
+            }
+
+            memcpy((void *)(child_phys + hhdm), (const void *)(phys + hhdm), PAGE_SIZE);
+            paging_map_page_in(dst->pml4_phys, va, child_phys, pte_flags);
+        }
 
         src_cur = src_cur->next;
     }
@@ -786,8 +787,6 @@ void vmm_unmap_phys(vmm_space_t *space, u64 vaddr)
 void vmm_space_activate(vmm_space_t *space)
 {
     if (!space || !space->pml4_phys) return;
-    //if (!space || space == active_space) return;
-    if (space == active_space) return;
 
     arch_mmu_activate(space->pml4_phys);
     active_space = space;

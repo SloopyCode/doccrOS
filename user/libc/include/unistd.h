@@ -35,6 +35,7 @@
 #define SYS_GETGID      104
 #define SYS_REBOOT      169
 #define SYS_CLOCK_GETTIME 228
+#define SYS_SPAWN         400
 
 #define SEEK_SET        0
 #define SEEK_CUR        1
@@ -52,6 +53,7 @@ long lseek(int fd, long offset, int whence);
 long getpid(void);
 long fork(void);
 long execve(const char *path, char *const argv[], char *const envp[]);
+long spawn(const char *path);
 void yield(void);
 long waitpid(long pid, int *wstatus, int options);
 long getuid(void);
