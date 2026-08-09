@@ -16,6 +16,7 @@
 #include "sys_mem.h"
 #include "sys_ioctl.h"
 #include "sys_power.h"
+#include "sys_eventfd.h"
 
 
 #include <kernel/arch/x86_64/idt/idt.h>
@@ -100,6 +101,7 @@ void syscall_dispatch(cpu_state_t *state)
 	    case SYS_GETUID:       sys_getuid(state);       break;
 	    case SYS_GETGID:       sys_getgid(state);       break;
 		case SYS_REBOOT:       sys_reboot(state);       break;
+		case SYS_EVENTFD:      sys_eventfd(state);      break;
         case SYS_CLOCK_GETTIME: {
             struct user_timespec { i64 tv_sec; i64 tv_nsec; };
             struct user_timespec *ts = (void *)state->rsi;

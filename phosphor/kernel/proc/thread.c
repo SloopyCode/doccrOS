@@ -11,6 +11,7 @@
 #include "thread.h"
 #include "process.h"
 #include "scheduler.h"
+#include "wait.h"
 #include <kernel/mem/meminclude.h>
 #include <kernel/arch/hal/halt.h>
 #include <kernel/screen/lib/string.h>
@@ -169,6 +170,7 @@ void thread_destroy(thread_t *t)
     __asm__ volatile("pushfq; pop %0; cli" : "=r"(saved_flags) :: "memory");
 
     sched_remove(t);
+    wait_queue_remove(t);
 
     if (t->owner)
     {

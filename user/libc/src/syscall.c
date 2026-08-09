@@ -9,6 +9,7 @@
  */
 
 #include <unistd.h>
+#include <sys/eventfd.h>
 
 static inline long syscall3(long num, long a1, long a2, long a3)
 {
@@ -175,4 +176,9 @@ long spawn(const char *path)
 long reboot(int cmd)
 {
     return syscall3(SYS_REBOOT, cmd, 0, 0);
+}
+
+long eventfd(unsigned int initial_value, int flags)
+{
+    return syscall3(SYS_EVENTFD, initial_value, flags, 0);
 }

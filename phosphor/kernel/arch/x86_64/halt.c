@@ -1,14 +1,5 @@
-/*
- * SPDX-License-Identifier: GPL-3.0-or-later
- *
- * Copyright (c) 2026 sulfurLabs
- *
- * PROJECT: sulfurOS
- * FILE: halt.c
- *
- */
-
 #include <kernel/arch/x86_64/cpu.h>
+#include <kernel/arch/hal/irqflags.h>
 
 // Disable interrupts
 void cli(void) {
@@ -18,6 +9,21 @@ void cli(void) {
 // Enable interrupts
 void sti(void) {
     __asm__ volatile("sti");
+}
+
+irq_state_t irq_save(void)
+{
+    u64 flags;
+
+    __asm__ volatile("pushfq; pop %0; cli" : "=r"(flags) :: "memory");
+
+    return (irq_state_t)flags;
+}
+
+void irq_restore(irq_state_t state)
+{
+    __asm__ volatile("push %0; popfq" :: "r"((u64)state) : "memory", "cc");
+
 }
 
 // Full system halt

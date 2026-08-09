@@ -13,29 +13,30 @@
 
 #include <stddef.h>
 
-#define SYS_READ          0
-#define SYS_WRITE         1
-#define SYS_OPEN          2
-#define SYS_CLOSE         3
-#define SYS_IOCTL        16
-#define SYS_FORK         57
-#define SYS_EXECVE       59
-#define SYS_EXIT         60
-#define SYS_GETPID       39
-#define SYS_YIELD        24
-#define SYS_LSEEK         8
-#define SYS_MMAP          9
-#define SYS_MUNMAP       11
-#define SYS_BRK          12
-#define SYS_WAITPID      61
-#define SYS_GETDENTS     78
-#define SYS_MKDIR        83
-#define SYS_UNLINK       87
-#define SYS_GETUID      102
-#define SYS_GETGID      104
-#define SYS_REBOOT      169
-#define SYS_CLOCK_GETTIME 228
-#define SYS_SPAWN         400
+#define SYS_READ                  0
+#define SYS_WRITE                 1
+#define SYS_OPEN                  2
+#define SYS_CLOSE                 3
+#define SYS_IOCTL                16
+#define SYS_FORK                 57
+#define SYS_EXECVE               59
+#define SYS_EXIT                 60
+#define SYS_GETPID               39
+#define SYS_YIELD                24
+#define SYS_LSEEK                 8
+#define SYS_MMAP                  9
+#define SYS_MUNMAP               11
+#define SYS_BRK                  12
+#define SYS_WAITPID              61
+#define SYS_GETDENTS             78
+#define SYS_MKDIR                83
+#define SYS_UNLINK               87
+#define SYS_GETUID              102
+#define SYS_GETGID              104
+#define SYS_REBOOT              169
+#define SYS_CLOCK_GETTIME       228
+#define SYS_EVENTFD             290
+#define SYS_SPAWN               400
 
 #define SEEK_SET        0
 #define SEEK_CUR        1

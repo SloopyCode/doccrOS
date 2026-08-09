@@ -36,6 +36,7 @@
 #define SYS_GETGID        104
 #define SYS_REBOOT        169
 #define SYS_CLOCK_GETTIME 228
+#define SYS_EVENTFD       290
 #define SYS_SPAWN         400
 
 #define MSR_EFER       0xC0000080

@@ -62,6 +62,8 @@ typedef struct thread {
     struct proc    *owner;
     struct thread    *proc_next;
     struct thread    *sched_next;
+    struct thread    *wait_next;
+    struct wait_queue *wait_queue;
 } thread_t;
 
 void   thread_subsystem_init(void);
