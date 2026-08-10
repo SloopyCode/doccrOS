@@ -156,7 +156,8 @@ static int eventfd_dev_write(void *handle, const void *buf, size_t count)
 
 static void eventfd_dev_close(void *handle)
 {
-    eventfd_destroy((eventfd_object_t *)handle);
+    eventfd_object_t *o = handle;
+    if (--o->refcount <= 0) eventfd_destroy(o);
 }
 
 device_handler eventfd_device_ops =

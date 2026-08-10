@@ -26,6 +26,7 @@ typedef struct
     u32    flags;
     int    in_flight;
     int    closing;
+    int    refcount;
 
     wait_queue_t   readers;
     wait_queue_t   writers;
