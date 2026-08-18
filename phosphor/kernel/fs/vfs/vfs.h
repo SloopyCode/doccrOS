@@ -63,6 +63,7 @@ vfs_node_t *vfs_find_child(vfs_node_t *dir, const char *name);
 
 int vfs_write(vfs_node_t *node, const void *buf, u64 size, u64 offset);
 int vfs_read(vfs_node_t *node, void *buf, u64 size);
+int vfs_truncate(vfs_node_t *node, u64 size);
 
 void vfs_set_data(vfs_node_t *node, u8 *ptr, u64 size);
 

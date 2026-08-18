@@ -9,14 +9,11 @@
  */
 
 #include "sys_fs.h"
+#include "ptr.h"
+#include "../../../fs/openfile.h"
 #include <kernel/proc/process.h>
 #include <kernel/fs/vfs/vfs.h>
 #include <kernel/devices/device_init.h>
-
-static int user_ptr_ok(u64 ptr)
-{
-    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
-}
 
 void sys_open(cpu_state_t *state)
 {
@@ -39,14 +36,35 @@ void sys_open(cpu_state_t *state)
         state->rax = (u64)-1;
         return;
     }
-    if (node->type == VFS_FILE && (flags & (K_O_WRONLY | K_O_RDWR)))
+
+    if (node->type == VFS_FILE && (flags & (K_O_WRONLY | K_O_RDWR))) node->size = 0;
+
+    void *handle = NULL;
+
+    if (node->type == VFS_DEVICE && node->device && node->device->open)
     {
-        node->size = 0;
+        handle = node->device->open(path);
+        if (!handle)
+        {
+            state->rax = (u64)-1;
+            return;
+        }
+    }
+
+    int ofd = openfile_alloc(node, handle);
+    if (ofd < 0)
+    {
+        if (node->type == VFS_DEVICE && handle && node->device->close)
+            node->device->close(handle);
+
+        state->rax = (u64)-1;
+        return;
     }
 
     proc_t *p = process_get_current();
     if (!p)
     {
+        openfile_unref(ofd);
         state->rax = (u64)-1;
         return;
     }
@@ -55,27 +73,16 @@ void sys_open(cpu_state_t *state)
     {
         if (!p->fd_table[fd].used)
         {
-            void *handle   = NULL;
+            void *handle = NULL;
+            p->fd_table[fd].used = 1;
+            p->fd_table[fd].ofd = ofd;
 
-            if (node->type == VFS_DEVICE && node->device && node->device->open)
-            {
-                handle     = node->device->open(path);
-                if (!handle)
-                {
-                    state->rax = (u64)-1;
-                    return;
-                }
-            }
-
-            p->fd_table[fd].node    = node;
-            p->fd_table[fd].offset  = 0;
-            p->fd_table[fd].used    = 1;
-            p->fd_table[fd].device_handle = handle;
             state->rax = (u64)fd;
             return;
         }
     }
 
+    openfile_unref(ofd);
     state->rax = (u64)-1;
 }
 
@@ -90,30 +97,58 @@ void sys_close(cpu_state_t *state)
     }
 
     proc_t *p = process_get_current();
+    if (!p || !p->fd_table[fd].used)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (p->fd_table[fd].ofd >= 0) openfile_unref(p->fd_table[fd].ofd);
+
+    p->fd_table[fd].used = 0;
+    p->fd_table[fd].ofd = -1;
+
+    state->rax = 0;
+}
+
+void sys_dup2(cpu_state_t *state)
+{
+    int oldfd = (int)state->rdi;
+    int newfd = (int)state->rsi;
+
+    proc_t *p = process_get_current();
     if (!p)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    if (!p->fd_table[fd].used)
+    if (oldfd < 0 || oldfd >= FD_MAX || newfd < 0 || newfd >= FD_MAX)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    vfs_node_t *node        = p->fd_table[fd].node;
-    if (node && node->type  == VFS_DEVICE && node->device && node->device->close)
+    if (!p->fd_table[oldfd].used)
     {
-        node->device->close(p->fd_table[fd].device_handle);
+        state->rax = (u64)-1;
+        return;
     }
 
-    p->fd_table[fd].node    = NULL;
-    p->fd_table[fd].offset  = 0;
-    p->fd_table[fd].used    = 0;
-    p->fd_table[fd].device_handle = NULL;
+    if (oldfd == newfd)
+    {
+        state->rax = (u64)newfd;
+        return;
+    }
 
-    state->rax = 0;
+    if (p->fd_table[newfd].used && p->fd_table[newfd].ofd >= 0) openfile_unref(p->fd_table[newfd].ofd);
+
+    p->fd_table[newfd].used = 1;
+    p->fd_table[newfd].ofd = p->fd_table[oldfd].ofd;
+
+    if (p->fd_table[newfd].ofd >= 0) openfile_ref(p->fd_table[newfd].ofd);
+
+    state->rax = (u64)newfd;
 }
 
 void sys_lseek(cpu_state_t *state)
@@ -135,31 +170,39 @@ void sys_lseek(cpu_state_t *state)
         return;
     }
 
-    vfs_node_t *node = p->fd_table[fd].node;
-    if (!node    || node->type != VFS_FILE)
+    open_file_t *of = openfile_get(p->fd_table[fd].ofd);
+    if (!of || !of->node)
     {
-        state->rax   = (u64)-1;
+        state->rax = (u64)-1;
+        return;
+    }
+
+    vfs_node_t *node = of->node;
+
+    if (node->type != VFS_FILE)
+    {
+        state->rax = (u64)-1;
         return;
     }
 
     i64 new_off;
 
-    if (whence   == 0)  new_off  = offset;
-    else if (whence == 1)  new_off  = (i64)p->fd_table[fd].offset + offset;
-    else if (whence == 2)  new_off  = (i64)node->size + offset;
+    if (whence == 0) new_off = offset;
+    else if (whence == 1) new_off = (i64)of->offset + offset;
+    else if (whence == 2) new_off = (i64)node->size + offset;
     else
     {
-        state->rax   = (u64)-1; // unknown?
+        state->rax = (u64)-1; // unknown?
         return;
     }
 
     if (new_off < 0)
     {
-        state->rax   = (u64)-1; // no seak vefore start
+        state->rax = (u64)-1; // no seak vefore start
         return;
     }
 
-    p->fd_table[fd].offset = (u64)new_off;
+    of->offset = (u64)new_off;
     state->rax = (u64)new_off;
 }
 
@@ -194,36 +237,44 @@ void sys_getdents(cpu_state_t *state)
         return;
     }
 
-    proc_t *p      = process_get_current();
-    if (!p ||      !p->fd_table[fd].used)
+    proc_t *p = process_get_current();
+    if (!p || !p->fd_table[fd].used)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    vfs_node_t *dir = p->fd_table[fd].node;
-    if (!dir       || dir->type != VFS_DIRECTORY)
+    open_file_t *of = openfile_get(p->fd_table[fd].ofd);
+    if (!of || !of->node)
     {
         state->rax = (u64)-1; // not a dir
         return;
     }
 
-    u64 written    = 0;
-    int start      = (int)p->fd_table[fd].offset; // track child
+    vfs_node_t *dir = of->node;
+
+    if (dir->type != VFS_DIRECTORY)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    u64 written = 0;
+    int start   = (int)of->offset;
 
     for (
-    	int i      = start;
-     	i < dir->    child_count;
-      	i++)
-    {
+        int i = start;
+        i < dir-> child_count;
+        i++
+    ) {
         vfs_node_t *child = dir->children[i];
         if (!child) continue;
 
         // figures out how long the name actually is
-        int name_len      = 0;
+        int name_len = 0;
         while (
-        	child->name[name_len] &&
-         	name_len < VFS_NAME_MAX - 1
+            child->name[name_len] &&
+            name_len < VFS_NAME_MAX - 1
         )name_len++;
 
         u64 entry_size = sizeof(linux_dirent64_t);
@@ -239,13 +290,13 @@ void sys_getdents(cpu_state_t *state)
         int j = 0;
         while (child->name[j] && j < 255)
         {
-            entry->d_name[j]     = child->name[j];
+            entry->d_name[j] = child->name[j];
             j++;
         }
-        entry->d_name[j]       = '\0';
+        entry->d_name[j] = '\0';
 
-        written  += entry_size;
-        p->fd_table[fd].offset = (u64)(i + 1);
+        written += entry_size;
+        of->offset = (u64)(i + 1);
     }
 
     state->rax = written; // bytes into buffer
@@ -257,14 +308,14 @@ void sys_mkdir(cpu_state_t *state)
 
     if (!user_ptr_ok((u64)path))
     {
-        state->rax   = (u64)-1;
+        state->rax = (u64)-1;
         return;
     }
 
     vfs_node_t *node = vfs_mkdir(path);
     if (!node)
     {
-        state->rax   = (u64)-1;
+        state->rax = (u64)-1;
         return;
     }
 
@@ -282,4 +333,27 @@ void sys_unlink(cpu_state_t *state)
 
     int result = vfs_remove(path);
     state->rax = (result == 0) ? 0 : (u64)-1;
+}
+
+void sys_ftruncate(cpu_state_t *state)
+{
+    u64 fd = state->rdi;
+    u64 size = state->rsi;
+
+    proc_t *p = process_get_current();
+
+    if (fd < 3 || fd >= FD_MAX || !p || !p->fd_table[fd].used)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    open_file_t *of = openfile_get(p->fd_table[fd].ofd);
+    if (!of || !of->node)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    state->rax = (vfs_truncate(of->node, size) < 0) ? (u64)-1 : 0;
 }

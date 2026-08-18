@@ -116,8 +116,8 @@ static void bs_clear_area(bs_screen_t *scr)
 
 static void bs_scroll(bs_screen_t *scr)
 {
-    u32 scale        = get_font_scale();
-    u32 line_h       = 8 * scale + 2 * scale;
+    u32 scale = get_font_scale();
+    u32 line_h = 8 * scale + 2 * scale;
 
     if (!scr->pixels  || line_h >= scr->height)
     {
@@ -128,7 +128,7 @@ static void bs_scroll(bs_screen_t *scr)
         return;
     }
 
-    u32 keep_rows    = scr->height - line_h;
+    u32 keep_rows = scr->height - line_h;
 
     memmove
     (
@@ -145,8 +145,8 @@ static void bs_scroll(bs_screen_t *scr)
 
     bs_flush(scr);
 
-    scr->cursor_x    = 0;
-    scr->cursor_y    = keep_rows;
+    scr->cursor_x = 0;
+    scr->cursor_y = keep_rows;
 }
 
 static void bs_putchar(char c, u32 color)
@@ -154,45 +154,48 @@ static void bs_putchar(char c, u32 color)
     bs_screen_t *scr = &bs.Screens[active_screen];
     if (!scr->visible) return;
 
-    u32 scale      = get_font_scale();
-    u32 char_w     = 8 * scale;
-    u32 char_h     = 8 * scale;
-    u32 line_h     = char_h + 2 * scale;
+    #if BOOTUP_VISUALS == 0
+        u32 scale = get_font_scale();
+        u32 char_w = 8 * scale;
+        u32 char_h = 8 * scale;
+        u32 line_h = char_h + 2 * scale;
 
-    if (c == '\n')
-    {
-        scr->cursor_x = 0;
-        scr->cursor_y += line_h;
-    }
-    else
-    {
-        if (scr->cursor_x + char_w >= scr->width)
+        if (c == '\n')
         {
             scr->cursor_x = 0;
             scr->cursor_y += line_h;
         }
+        else
+        {
+            if (scr->cursor_x + char_w >= scr->width)
+            {
+                scr->cursor_x = 0;
+                scr->cursor_y += line_h;
+            }
 
-        bs_draw_glyph(scr, c, color);
-        bs_flush_rect(
-        	scr,
-         	scr->cursor_x,
-          	scr->cursor_y,
-           	char_w,
-            char_h
-        );
-        scr->cursor_x += char_w;
-    }
+            bs_draw_glyph(scr, c, color);
+            bs_flush_rect(
+                scr,
+                scr->cursor_x,
+                scr->cursor_y,
+                char_w,
+                char_h
+            );
 
-    if (
-        scr->cursor_y + line_h >= scr->height
-    ) bs_scroll(scr); // ran out of space :(
+            scr->cursor_x += char_w;
+        }
 
-    // keeps a copy in log from boot
-    if (scr->buffer && scr->buf_len < BS_BUF_SIZE - 1)
-    {
-        scr->buffer[scr->buf_len++]     = c;
-        scr->buffer[scr->buf_len]       = '\0';
-    }
+        if (
+            scr->cursor_y + line_h >= scr->height
+        ) bs_scroll(scr);
+
+        // keeps a copy in log from boot
+        if (scr->buffer && scr->buf_len < BS_BUF_SIZE - 1)
+        {
+            scr->buffer[scr->buf_len++] = c;
+            scr->buffer[scr->buf_len] = '\0';
+        }
+    #endif
 }
 
 static void bs_print(const char *str, u32 color)

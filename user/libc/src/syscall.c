@@ -9,9 +9,13 @@
  */
 
 #include <unistd.h>
+#include "syscall.h"
 #include <sys/eventfd.h>
+#include <sys/utsname.h>
+#include <signal.h>
+#include <stdarg.h>
 
-static inline long syscall3(long num, long a1, long a2, long a3)
+long syscall3(long num, long a1, long a2, long a3)
 {
     long ret;
     __asm__ volatile (
@@ -23,7 +27,7 @@ static inline long syscall3(long num, long a1, long a2, long a3)
     return ret;
 }
 
-static inline long syscall6(
+long syscall6(
     long num,
     long a1,
     long a2,
@@ -126,6 +130,11 @@ long getdents(int fd, void *buf, size_t size)
     return syscall3(SYS_GETDENTS, fd, (long)buf, (long)size);
 }
 
+long ftruncate(int fd, long size)
+{
+    return syscall3(SYS_FTRUNCATE, fd, size, 0);
+}
+
 void *brk_call(void *addr)
 {
     long result = syscall3(SYS_BRK, (long)addr, 0, 0);
@@ -163,9 +172,89 @@ int clock_gettime(int clock_id, struct timespec *timespec)
     return (int)syscall3(SYS_CLOCK_GETTIME, clock_id, (long)timespec, 0);
 }
 
-long execve(const char *path, char *const argv[], char *const envp[])
+int execve(const char *path, char *const argv[], char *const envp[])
 {
-    return syscall3(SYS_EXECVE, (long)path, (long)argv, (long)envp);
+    return (int)syscall6(
+        SYS_EXECVE,
+        (long)path,
+        (long)argv,
+        (long)envp,
+        0,
+        0,
+        0
+    );
+}
+
+sighandler_t signal(int signum, sighandler_t handler)
+{
+    long r = syscall6(
+        SYS_SIGNAL,
+        signum,
+        (long)handler,
+        0,
+        0,
+        0,
+        0
+    );
+
+    return (r == -1) ? SIG_DFL : (sighandler_t)r;
+}
+
+int kill(long pid, int sig)
+{
+    return (int)syscall6(
+        SYS_KILL,
+        (long)pid,
+        sig,
+        0,
+        0,
+        0,
+        0
+    );
+}
+
+int dup2(int oldfd, int newfd)
+{
+    return (int)syscall6(
+        SYS_DUP2,
+        oldfd,
+        newfd,
+        0,
+        0,
+        0,
+        0
+    );
+}
+
+#define EXEC_ARGV_MAX_USERSPACE 64 // kernel also has 64
+int execl(const char *path, const char *arg0, ...)
+{
+    char *argv[EXEC_ARGV_MAX_USERSPACE];
+    va_list ap;
+    int n = 0;
+
+    argv[n++] = (char *)arg0;
+
+    va_start(ap, arg0);
+
+    while (n < EXEC_ARGV_MAX_USERSPACE)
+    {
+        char *arg = va_arg(ap, char *);
+        argv[n++] = arg;
+
+        if (!arg) break;
+    }
+
+    va_end(ap);
+
+    if (n == EXEC_ARGV_MAX_USERSPACE) argv[EXEC_ARGV_MAX_USERSPACE - 1] = NULL;
+
+    return execve(path, argv, NULL);
+}
+
+int uname(struct utsname *buf)
+{
+    return (int)syscall3(SYS_UNAME, (long)buf, 0, 0);
 }
 
 long spawn(const char *path)
@@ -181,4 +270,9 @@ long reboot(int cmd)
 long eventfd(unsigned int initial_value, int flags)
 {
     return syscall3(SYS_EVENTFD, initial_value, flags, 0);
+}
+
+long eventfd_open(unsigned long long id)
+{
+    return syscall3(SYS_EVENTFD_OPEN, (long)id, 0, 0);
 }

@@ -17,6 +17,7 @@
 void sys_exit(cpu_state_t *state);
 void sys_yield(cpu_state_t *state);
 void sys_getpid(cpu_state_t *state);
+void sys_dup2(cpu_state_t *state);
 void sys_fork(cpu_state_t *state);
 void sys_execve(cpu_state_t *state);
 void sys_spawn(cpu_state_t *state);

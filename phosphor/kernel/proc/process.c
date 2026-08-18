@@ -10,8 +10,10 @@
 
 #include "process.h"
 #include "scheduler.h"
+#include "signal.h"
 #include <kernel/mem/meminclude.h>
 #include <kernel/fs/vfs/vfs.h>
+#include <kernel/fs/openfile.h>
 #include <kernel/devices/device_init.h>
 #include <kernel/screen/lib/string.h>
 #include <kernel/screen/lib/print.h>
@@ -43,16 +45,18 @@ static void proc_close_fds(proc_t *p)
     for (int fd = 0; fd < FD_MAX; fd++)
     {
         if (!p->fd_table[fd].used) continue;
+        if (p->fd_table[fd].ofd >= 0) openfile_unref(p->fd_table[fd].ofd);
 
         vfs_node_t *node = p->fd_table[fd].node;
         if (
-	        node &&
-	        node->type == VFS_DEVICE &&
-	        node->device &&
-	        node->device->close
+            node &&
+            node->type == VFS_DEVICE &&
+            node->device &&
+            node->device->close
         )node->device->close(p->fd_table[fd].device_handle);
 
         p->fd_table[fd].used = 0;
+        p->fd_table[fd].ofd  = -1;
         p->fd_table[fd].node = NULL;
         p->fd_table[fd].device_handle = NULL;
     }
@@ -83,8 +87,21 @@ static proc_t *proc_alloc(const char *name)
     p->next = head;
 
     p->fd_table[0].used = 1;
+    p->fd_table[0].ofd = -1;
+
     p->fd_table[1].used = 1;
+    p->fd_table[1].ofd = -1;
+
     p->fd_table[2].used = 1;
+    p->fd_table[2].ofd = -1;
+
+    for (int i = 3; i < FD_MAX; i++)
+    {
+        p->fd_table[i].used = 0;
+        p->fd_table[i].ofd = -1;
+    }
+
+    signal_proc_init(p);
 
     int i =    0;
     if (name)
@@ -203,9 +220,9 @@ void process_reap_zombies(void)
 }
 
 int process_waitpid(
-	proc_t *parent,
-	i64 target_pid,
-	int *exit_code_out
+    proc_t *parent,
+    i64 target_pid,
+    int *exit_code_out
 ){
     proc_t *cur       = proc_zombies;
     proc_t *prev      = NULL;
@@ -281,6 +298,15 @@ proc_t *process_get_current(void)
 
     return t ? t->owner  : NULL;
 }
+proc_t *process_find_by_pid(u64 pid)
+{
+    for (proc_t *cur = head; cur; cur = cur->next)
+    {
+        if (cur->pid == pid) return cur;
+    }
+
+    return NULL;
+}
 
 proc_t *process_fork(cpu_state_t *parent_state)
 {
@@ -294,6 +320,16 @@ proc_t *process_fork(cpu_state_t *parent_state)
 
     child->capabilities = parent->capabilities;
     memcpy(child->fd_table, parent->fd_table, sizeof(parent->fd_table));
+
+    for (int i = 0; i < FD_MAX; i++)
+    {
+        if (
+             child->fd_table[i].used &&
+             child->fd_table[i].ofd >= 0
+        ) openfile_ref(child->fd_table[i].ofd);
+    }
+
+    signal_on_fork(child, parent);
 
     child->space = vmm_clone_space(parent->space);
     if (!child->space)

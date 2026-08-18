@@ -23,13 +23,20 @@
 #define SYS_MMAP            9
 #define SYS_MUNMAP         11
 #define SYS_BRK            12
+#define SYS_DUP2           33
+#define SYS_SIGNAL         34
+#define SYS_SIGRETURN      35
+#define SYS_SET_SIGTRAMP   36
+#define SYS_KILL           62
 #define SYS_FORK           57
 #define SYS_EXECVE         59
+#define SYS_UNAME          63
 #define SYS_EXIT           60
 #define SYS_GETPID         39
 #define SYS_YIELD          24
 #define SYS_WAITPID        61
 #define SYS_GETDENTS       78
+#define SYS_FTRUNCATE      77
 #define SYS_MKDIR          83
 #define SYS_UNLINK         87
 #define SYS_GETUID        102
@@ -37,6 +44,12 @@
 #define SYS_REBOOT        169
 #define SYS_CLOCK_GETTIME 228
 #define SYS_EVENTFD       290
+#define SYS_EVENTFD_OPEN  291
+#define SYS_IPC_CREATE    292
+#define SYS_IPC_OPEN      293
+#define SYS_IPC_SEND      294
+#define SYS_IPC_RECV      295
+#define SYS_IPC_EVENTFD   296
 #define SYS_SPAWN         400
 
 #define MSR_EFER       0xC0000080

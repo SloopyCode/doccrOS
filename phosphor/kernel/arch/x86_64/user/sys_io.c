@@ -9,18 +9,16 @@
  */
 
 #include "sys_io.h"
+#include "ptr.h"
+#include "../../../fs/openfile.h"
 #include <kernel/screen/lib/print.h>
 #include <kernel/devices/input/kbd.h>
 #include <kernel/communication/serial.h>
 #include <kernel/proc/process.h>
 #include <kernel/fs/vfs/vfs.h>
 #include <kernel/devices/device_init.h>
+#include <kernel/devices/vt/vt.h>
 #include <kernel/mem/mem.h>
-
-static int user_ptr_ok(u64 ptr)
-{
-    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
-}
 
 void sys_read(cpu_state_t *state)
 {
@@ -34,13 +32,7 @@ void sys_read(cpu_state_t *state)
         return;
     }
 
-    if (fd == 0)
-    {
-        state->rax = kbd_read_events(buf, len);
-        return;
-    }
-
-    if (fd < 3 || fd >= FD_MAX)
+    if (fd >= FD_MAX)
     {
         state->rax = (u64)-1;
         return;
@@ -53,45 +45,68 @@ void sys_read(cpu_state_t *state)
         return;
     }
 
-    vfs_node_t *node = p->fd_table[fd].node;
-    if (!node)
+    int ofd = p->fd_table[fd].ofd;
+
+    if (ofd < 0)
+    {
+        if (fd == 0)
+        {
+            state->rax = kbd_read_events(buf, len);
+            return;
+        }
+
+        state->rax = (u64)-1;
+        return;
+    }
+
+    open_file_t *of = openfile_get(ofd);
+    if (!of)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    if (node->type == VFS_DEVICE)
+    if (of->node && of->node->type == VFS_DEVICE)
     {
-        if (!node->device || !node->device->read)
+        if (!of->node->device || !of->node->device->read)
         {
             state->rax = (u64)-1;
             return;
         }
 
-        state->rax  = (u64)node->device->read(p->fd_table[fd].device_handle, buf, len);
+        state->rax = (u64)of->node->device->read(
+            of->device_handle,
+            buf,
+            len
+        );
+
         return;
     }
 
-    if (node->type != VFS_FILE)
+    if (!of->node || of->node->type != VFS_FILE)
     {
         state->rax  = (u64)-1;
         return;
     }
 
-    u64 offset  = p->fd_table[fd].offset;
-    if (offset >= node->size)
+    if (of->offset >= of->node->size)
     {
         state->rax = 0;
         return;
     }
 
-    u64 remaining = node->size - offset;
-    u64 to_copy   = (len < remaining) ? len : remaining;
+    u64 remaining = of->node->size - of->offset;
+    u64 to_copy = (len < remaining) ? len : remaining;
 
-    memcpy(buf, node->data + offset, to_copy);
-    p->fd_table[fd].offset += to_copy;
+    memcpy(
+        buf,
+        of->node->data + of->offset,
+        to_copy
+    );
 
-    state->rax    = to_copy;
+    of->offset += to_copy;
+
+    state->rax = to_copy;
 }
 
 void sys_write(cpu_state_t *state)
@@ -107,22 +122,7 @@ void sys_write(cpu_state_t *state)
         return;
     }
 
-    if (fd == 1 || fd == 2)
-    {
-        int owns_framebuffer = p && process_has_cap(p, CAP_FRAMEBUFFER);
-        for (u64 i = 0; i < len; i++)
-        {
-            /* A graphics server owns the display contents. Keep its console
-             * output on serial so text rendering and full-screen scrolling do
-             * not destroy the framebuffer or stall application startup. */
-            if (!owns_framebuffer) putchar(buf[i], white());
-            serial_putchar(buf[i]);
-        }
-        state->rax = len;
-        return;
-    }
-
-    if (fd < 3 || fd >= FD_MAX)
+    if (fd >= FD_MAX)
     {
         state->rax = (u64)-1;
         return;
@@ -134,33 +134,71 @@ void sys_write(cpu_state_t *state)
         return;
     }
 
-    vfs_node_t *node = p->fd_table[fd].node;
-    if (!node)
+    int ofd = p->fd_table[fd].ofd;
+
+    if (ofd < 0)
+    {
+        if (fd == 1 || fd == 2)
+        {
+            int owns_framebuffer = process_has_cap(
+                p,
+                CAP_FRAMEBUFFER
+            );
+
+            for (u64 i = 0; i < len; i++)
+            {
+                if (vt_screen_enabled())
+                {
+                    putchar(buf[i], white());
+                }
+
+                serial_putchar(buf[i]);
+            }
+
+            state->rax = len;
+            return;
+        }
+
+        state->rax = (u64)-1;
+        return;
+    }
+
+    open_file_t *of = openfile_get(ofd);
+    if (!of)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    if (node->type == VFS_DEVICE)
+    if (of->node && of->node->type == VFS_DEVICE)
     {
-        if (!node->device || !node->device->write)
+        if (!of->node->device || !of->node->device->write)
         {
             state->rax = (u64)-1;
             return;
         }
 
-        state->rax = (u64)node->device->write(p->fd_table[fd].device_handle, buf, len);
+        state->rax = (u64)of->node->device->write(
+            of->device_handle,
+            buf,
+            len
+        );
+
         return;
     }
 
-    if (node->type != VFS_FILE)
+    if (!of->node || of->node->type != VFS_FILE)
     {
         state->rax  = (u64)-1;
         return;
     }
 
-    u64 offset = p->fd_table[fd].offset;
-    int written = vfs_write(node, buf, len, offset);
+    int written = vfs_write(
+        of->node,
+        buf,
+        len,
+        of->offset
+    );
 
     if (written > 0) p->fd_table[fd].offset += (u64)written;
 

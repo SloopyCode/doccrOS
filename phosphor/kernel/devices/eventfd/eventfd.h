@@ -27,6 +27,7 @@ typedef struct
     int    in_flight;
     int    closing;
     int    refcount;
+    u64 id;
 
     wait_queue_t   readers;
     wait_queue_t   writers;
@@ -38,5 +39,9 @@ extern device_handler eventfd_device_ops;
 
 eventfd_object_t *eventfd_create(u64 initial_value, u32 flags);
 void eventfd_destroy(eventfd_object_t *eventfd_object);
+eventfd_object_t *eventfd_find(u64 id);
+eventfd_object_t *eventfd_acquire(u64 id);
+void eventfd_release(eventfd_object_t *eventfd_object);
+void eventfd_signal(eventfd_object_t *eventfd_object, u64 value);
 
 #endif

@@ -14,8 +14,7 @@
 #include <kernel/screen/lib/print.h>
 #include <kernel/communication/serial.h>
 
-// classic "newc" cpio header, 110 bytes of pure ascii hex, no binary allowed
-// yes every number in here is a string. yes it is a bit silly. it works though
+#define CPIO_LOG_BUF 320
 typedef struct __attribute__((packed)) {
     char magic[6];
     char ino[8];
@@ -76,11 +75,23 @@ void cpio_extract(void *archive, u64 size)
         return;
     }
 
-    printf("[CPIO] archive at %p, %llu bytes total, lets see whats packed in there\n", archive, size);
+    {
+        char msg[CPIO_LOG_BUF];
+        char num[24];
 
-    u8 *base     = (u8 *)archive;
-    u64 off     = 0;
-    u32 done    = 0;
+        str_copy(msg, "archive at 0x");
+        str_from_hex(num, (u64)archive);
+        str_append(msg, num);
+        str_append(msg, ", ");
+        str_append_uint(msg, (u32)size);
+        str_append(msg, " bytes total\n");
+
+        log("[CPIO]", msg);
+    }
+
+    u8 *base  = (u8 *)archive;
+    u64 off   = 0;
+    u32 done  = 0;
 
     while (off + sizeof(cpio_header_t) <= size)
     {
@@ -123,14 +134,31 @@ void cpio_extract(void *archive, u64 size)
 
             if (type == CPIO_TYPE_DIR)
             {
-                printf("[CPIO] dir   %s\n", name);
+                char msg[CPIO_LOG_BUF];
+
+                str_copy(msg, "dir   ");
+                str_append(msg, name);
+                str_append(msg, "\n");
+
+                log("[CPIO]", msg);
+
+
                 vfs_mkdir(name);
 
                 done++;
 
             } else if (type == CPIO_TYPE_REG)
             {
-                printf("[CPIO] file  %s (%u bytes)\n", name, filesize);
+                char msg[CPIO_LOG_BUF];
+
+                str_copy(msg, "file  ");
+                str_append(msg, name);
+                str_append(msg, " (");
+                str_append_uint(msg, filesize);
+                str_append(msg, " bytes)\n");
+
+                log("[CPIO]", msg);
+
 
                 vfs_node_t *f = vfs_create_file(name);
                 if (f && filesize > 0)
@@ -142,12 +170,30 @@ void cpio_extract(void *archive, u64 size)
 
             } else
             {
-                printf("[CPIO] skip  %s (type 0x%x, not a dir or regular file)\n", name, type);
+                char msg[CPIO_LOG_BUF];
+                char num[24];
+
+                str_copy(msg, "skip  ");
+                str_append(msg, name);
+                str_append(msg, " (type 0x");
+                str_from_hex(num, type);
+                str_append(msg, num);
+                str_append(msg, ", not a dir or regular file)\n");
+
+                log("[CPIO]", msg, warning);
             }
         }
 
         off = next_off;
     }
 
-    printf("[CPIO] unpacked %u entries total\n", done);
+    {
+        char msg[CPIO_LOG_BUF];
+
+        str_copy(msg, "unpacked ");
+        str_append_uint(msg, done);
+        str_append(msg, " entries total\n");
+
+        log("[CPIO]", msg, success);
+    }
 }

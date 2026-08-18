@@ -15,6 +15,9 @@ typedef enum
 } dt_chan_t;
 
 void dt_ipc_itoa(int v, char *out);
+int dt_ipc_desktop_init(void);
+int dt_ipc_uses_kernel(void);
+void dt_ipc_cmd_clear(void);
 void dt_ipc_path(dt_chan_t kind, pid_t pid, char out[DT_IPC_PATH_MAX]);
 void dt_ipc_cmd_append(const char *line);
 

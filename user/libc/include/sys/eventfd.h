@@ -16,3 +16,4 @@
 // NOEXEC in future
 
 long eventfd(unsigned int initial_value, int flags);
+long eventfd_open(unsigned long long id);

@@ -19,7 +19,7 @@ CFLAGS := -ffreestanding -nostdlib -fno-builtin -fno-stack-protector \
 
 ASFLAGS := -f elf64
 
-SRCS_C := src/string.c src/printf.c src/syscall.c src/stdlib.c src/stdio.c src/ctype.c src/time.c src/math.c
+SRCS_C := src/string.c src/printf.c src/syscall.c src/stdlib.c src/stdio.c src/ctype.c src/time.c src/math.c src/sipc.c
 OBJS_C := $(SRCS_C:src/%.c=build/%.o)
 
 all: build/crt0.o build/libc.a

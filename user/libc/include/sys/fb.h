@@ -23,6 +23,8 @@
 #define FB_IOCTL_UNMAP       7
 #define FB_IOCTL_FLUSH       8
 #define FB_IOCTL_FLUSH_RECT  9
+#define FB_IOCTL_VT_ENABLE  10
+#define FB_IOCTL_VT_DISABLE 11
 
 typedef struct
 {

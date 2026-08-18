@@ -10,6 +10,8 @@
 
 #include "syscall.h"
 
+#include <kernel/proc/signal.h>
+
 #include "sys_io.h"
 #include "sys_fs.h"
 #include "sys_process.h"
@@ -17,6 +19,8 @@
 #include "sys_ioctl.h"
 #include "sys_power.h"
 #include "sys_eventfd.h"
+#include "sys_ipc.h"
+#include "sys_uname.h"
 
 
 #include <kernel/arch/x86_64/idt/idt.h>
@@ -24,7 +28,14 @@
 #include <kernel/screen/lib/print.h>
 #include <kernel/arch/hal/timer.h>
 
+#include <types.h>
+
 u64 syscall_scratch[2];
+
+int user_ptr_ok(u64 ptr)
+{
+    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
+}
 
 static inline void wrmsr(u32 msr, u64 val)
 {
@@ -79,30 +90,40 @@ void syscall_dispatch(cpu_state_t *state)
 {
     switch (state->rax)
     {
-	    case SYS_READ:         sys_read(state);         break;
-	    case SYS_WRITE:        sys_write(state);        break;
-	    case SYS_OPEN:         sys_open(state);         break;
-	    case SYS_CLOSE:        sys_close(state);        break;
-	    case SYS_IOCTL:        sys_ioctl(state);        break;
-	    case SYS_LSEEK:        sys_lseek(state);        break;
-	    case SYS_MMAP:         sys_mmap(state);         break;
-	    case SYS_MUNMAP:       sys_munmap(state);       break;
-	    case SYS_BRK:          sys_brk(state);          break;
-	    case SYS_FORK:         sys_fork(state);         break;
-		case SYS_EXECVE:       sys_execve(state);       break;
-		case SYS_SPAWN:        sys_spawn(state);        break;
-	    case SYS_EXIT:         sys_exit(state);         break;
-	    case SYS_YIELD:        sys_yield(state);        break;
-	    case SYS_GETPID:       sys_getpid(state);       break;
-	    case SYS_WAITPID:      sys_waitpid(state);      break;
-	    case SYS_GETDENTS:     sys_getdents(state);     break;
-	    case SYS_MKDIR:        sys_mkdir(state);        break;
-	    case SYS_UNLINK:       sys_unlink(state);       break;
-	    case SYS_GETUID:       sys_getuid(state);       break;
-	    case SYS_GETGID:       sys_getgid(state);       break;
-		case SYS_REBOOT:       sys_reboot(state);       break;
-		case SYS_EVENTFD:      sys_eventfd(state);      break;
-        case SYS_CLOCK_GETTIME: {
+        case SYS_READ:           sys_read(state);               break;
+        case SYS_WRITE:          sys_write(state);              break;
+        case SYS_OPEN:           sys_open(state);               break;
+        case SYS_CLOSE:          sys_close(state);              break;
+        case SYS_IOCTL:          sys_ioctl(state);              break;
+        case SYS_LSEEK:          sys_lseek(state);              break;
+        case SYS_MMAP:           sys_mmap(state);               break;
+        case SYS_MUNMAP:         sys_munmap(state);             break;
+        case SYS_BRK:            sys_brk(state);                break;
+        case SYS_FORK:           sys_fork(state);               break;
+        case SYS_DUP2:           sys_dup2(state);               break;
+        case SYS_EXECVE:         sys_execve(state);             break;
+        case SYS_SPAWN:          sys_spawn(state);              break;
+        case SYS_EXIT:           sys_exit(state);               break;
+        case SYS_UNAME:          sys_uname(state);              break;
+        case SYS_YIELD:          sys_yield(state);              break;
+        case SYS_GETPID:         sys_getpid(state);             break;
+        case SYS_WAITPID:        sys_waitpid(state);            break;
+        case SYS_GETDENTS:       sys_getdents(state);           break;
+        case SYS_FTRUNCATE:      sys_ftruncate(state);          break;
+        case SYS_MKDIR:          sys_mkdir(state);              break;
+        case SYS_UNLINK:         sys_unlink(state);             break;
+        case SYS_GETUID:         sys_getuid(state);             break;
+        case SYS_GETGID:         sys_getgid(state);             break;
+        case SYS_REBOOT:         sys_reboot(state);             break;
+        case SYS_EVENTFD:        sys_eventfd(state);            break;
+        case SYS_EVENTFD_OPEN:   sys_eventfd_open(state);       break;
+        case SYS_IPC_CREATE:     sys_ipc_create(state);         break;
+        case SYS_IPC_OPEN:       sys_ipc_open(state);           break;
+        case SYS_IPC_SEND:       sys_ipc_send(state);           break;
+        case SYS_IPC_RECV:       sys_ipc_recv(state);           break;
+        case SYS_IPC_EVENTFD:    sys_ipc_get_eventfd(state);    break;
+        case SYS_CLOCK_GETTIME:
+        {
             struct user_timespec { i64 tv_sec; i64 tv_nsec; };
             struct user_timespec *ts = (void *)state->rsi;
             if (!ts || (u64)ts > 0x00007fffffffffffULL) { state->rax = (u64)-1; break; }
@@ -112,8 +133,27 @@ void syscall_dispatch(cpu_state_t *state)
             state->rax = 0;
             break;
         }
+        case SYS_KILL:
+            state->rax = (u64)sys_kill_impl(state->rdi, (int)state->rsi);
+            break;
+        case SYS_SIGNAL:
+        {
+            int ok;
+            u64 old = sys_signal_impl((int)state->rdi, state->rsi, &ok);
+            state->rax = ok ? old : (u64)-1;
+            break;
+        }
+        case SYS_SIGRETURN:  // all from proc/signal.c btw
+            sys_sigreturn_impl(state);
+            break;
+        case SYS_SET_SIGTRAMP:
+            sys_set_sigtramp_impl(state->rdi);
+            state->rax = 0;
+            break;
+
         default:
             state->rax = (u64)-1;
             break;
     }
+    signal_check_and_deliver(state);
 }

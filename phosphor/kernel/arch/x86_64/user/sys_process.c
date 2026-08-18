@@ -9,6 +9,7 @@
  */
 
 #include "sys_process.h"
+#include "ptr.h"
 #include <kernel/proc/thread.h>
 #include <kernel/proc/process.h>
 #include <kernel/proc/scheduler.h>
@@ -17,11 +18,6 @@
 #include <kernel/communication/serial.h>
 #include <kernel/mem/phys/physmem.h>
 #include <kernel/mem/kheap/kheap.h>
-
-static int user_ptr_ok(u64 ptr)
-{
-    return ptr != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
-}
 
 void sys_exit(cpu_state_t *state)
 {
@@ -57,6 +53,7 @@ void sys_fork(cpu_state_t *state)
 void sys_execve(cpu_state_t *state)
 {
     const char *path =  (const char *)state->rdi;
+    u64 user_argv    = state->rsi;
 
     if (!user_ptr_ok((u64)path))
     {
@@ -74,7 +71,11 @@ void sys_execve(cpu_state_t *state)
     path_buf[i] = '\0';
 
     vfs_node_t *node = vfs_find(path_buf);
-    if (!node || node->type != VFS_FILE || !node->data || node->size == 0)
+
+    if (!node ||
+        node->type != VFS_FILE ||
+        !node->data ||
+        node->size == 0)
     {
         state->rax = (u64)-1;
         return;
@@ -89,26 +90,71 @@ void sys_execve(cpu_state_t *state)
 
     char name_buf[64];
     {
-        const char *base   = path_buf;
-        for (const char *s = path_buf; *s; s++) if (*s == '/') base = s + 1;
+        const char *base = path_buf;
+
+        for (const char *s = path_buf; *s; s++)
+        {
+            if (*s == '/')
+                base = s + 1;
+        }
 
         int j = 0;
         while (base[j] && j < 63)
         {
-        	name_buf[j] = base[j];
-         	j++;
+            name_buf[j] = base[j];
+            j++;
         }
         name_buf[j] = '\0';
     }
 
-    if (elf_exec_replace(p, state, node->data, node->size, name_buf) != 0)
+    char *argv[EXEC_ARGV_MAX];
+    int argc = 0;
+    int have_argv = (user_argv != 0);
+
+    if (have_argv)
     {
-        printf("[SYS_EXECVE] exec of '%s' failed, killing pid=%llu\n", path_buf, p->pid);
+        if (elf_collect_user_argv(
+                p->space,
+                user_argv,
+                argv,
+                &argc
+            ) != 0)
+        {
+            state->rax = (u64)-1;
+            return;
+        }
+    }
+    else
+    {
+        argv[0] = name_buf;
+        argc = 1;
+    }
+
+    if (elf_exec_replace(
+            p,
+            state,
+            node->data,
+            node->size,
+            name_buf,
+            argv,
+            argc
+        ) != 0)
+    {
+        if (have_argv) elf_free_argv(argv, argc);
+
+        #if DEBUGINFO
+            printf(
+                "[EXECVE] exec of '%s' failed, killing pid=%llu\n",
+                path_buf,
+                p->pid
+            );
+        #endif
 
         thread_t *self = thread_get_current();
         if (self)
         {
             self->state = THREAD_DEAD;
+
             if (p->alive_count > 0) p->alive_count--;
         }
         process_exit(p, 1);
@@ -117,6 +163,8 @@ void sys_execve(cpu_state_t *state)
         __asm__ volatile("sti");
         for (;;) __asm__ volatile("hlt");
     }
+
+    if (have_argv) elf_free_argv(argv, argc);
 }
 
 void sys_spawn(cpu_state_t *state)

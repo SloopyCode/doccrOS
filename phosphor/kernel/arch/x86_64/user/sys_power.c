@@ -9,6 +9,7 @@
  */
 
 #include "sys_power.h"
+#include "ptr.h"
 #include <kernel/arch/x86_64/poweroff.h>
 
 void sys_reboot(cpu_state_t *state)

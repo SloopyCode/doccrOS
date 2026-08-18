@@ -8,8 +8,7 @@
  *
  */
 
-#ifndef ELF_H
-#define ELF_H
+#pragma once
 
 #include <types.h>
 #include <kernel/proc/process.h>
@@ -62,7 +61,17 @@ typedef struct
     u64     p_align;
 } __attribute__((packed)) elf64_phdr_t;
 
-int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *out_pid);
-int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name);
+#define EXEC_ARGV_MAX 64
 
-#endif
+void elf_free_argv(char *argv[EXEC_ARGV_MAX], int argc);
+int elf_collect_user_argv(vmm_space_t *space, u64 user_argv, char *argv_out[EXEC_ARGV_MAX], int *argc_out);
+int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *out_pid);
+int elf_exec_replace(
+    proc_t *p,
+    cpu_state_t *state,
+    const u8 *data,
+    u64 size,
+    const char *name,
+    char *argv[EXEC_ARGV_MAX],
+    int argc
+);

@@ -11,6 +11,7 @@
 #include "fb0.h"
 #include "../names.h"
 
+#include <kernel/devices/vt/vt.h>
 #include <kernel/screen/graphics.h>
 #include <kernel/screen/bootscreen/boot.h>
 #include <kernel/screen/lib/log.h>
@@ -96,11 +97,16 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
 
     switch (request)
     {
-        case FB_IOCTL_GET_WIDTH:    return (i64)get_fb_width();
-        case FB_IOCTL_GET_HEIGHT:   return (i64)get_fb_height();
-        case FB_IOCTL_GET_PITCH:    return (i64)get_fb_pitch();
-        case FB_IOCTL_GET_BPP:      return (i64)get_fb_bpp();
-        case FB_IOCTL_GET_SIZE:     return (i64)get_fb_size();
+        case FB_IOCTL_GET_WIDTH:
+            return (i64)get_fb_width();
+        case FB_IOCTL_GET_HEIGHT:
+            return (i64)get_fb_height();
+        case FB_IOCTL_GET_PITCH:
+            return (i64)get_fb_pitch();
+        case FB_IOCTL_GET_BPP:
+            return (i64)get_fb_bpp();
+        case FB_IOCTL_GET_SIZE:
+            return (i64)get_fb_size();
         case FB_IOCTL_GET_INFO:
         {
             if (!arg) return -1;
@@ -154,7 +160,6 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
             *(u64 *)arg = vaddr;
             return 0;
         }
-
         case FB_IOCTL_UNMAP:
         {
             if (!h->mapped) return 0;
@@ -170,24 +175,40 @@ static i64 fb0_ioctl(void *handle, u64 request, void *arg)
         case FB_IOCTL_FLUSH:
             bs.Flush(BS3);
             return 0;
-
         case FB_IOCTL_FLUSH_RECT:
         {
             if (!arg) return -1;
             fb_rect_t rect = *(fb_rect_t *)arg;
             bs_screen_t *scr = &bs.Screens[BS3];
             u32 *dst = get_framebuffer();
-            if (!dst || !scr->pixels || rect.x >= scr->width || rect.y >= scr->height)
-                return -1;
+            if (
+                !dst ||
+                !scr->pixels ||
+                rect.x >= scr->width ||
+                rect.y >= scr->height
+            ) return -1;
+
             if (rect.width > scr->width - rect.x) rect.width = scr->width - rect.x;
             if (rect.height > scr->height - rect.y) rect.height = scr->height - rect.y;
+
             u32 dst_stride = get_fb_pitch() / sizeof(u32);
             for (u32 y = 0; y < rect.height; y++)
-                memcpy(&dst[(rect.y + y) * dst_stride + rect.x],
-                       &scr->pixels[(rect.y + y) * scr->width + rect.x],
-                       rect.width * sizeof(u32));
+            {
+                memcpy(
+                    &dst[(rect.y + y) * dst_stride + rect.x],
+                    &scr->pixels[(rect.y + y) * scr->width + rect.x],
+                    rect.width * sizeof(u32)
+                );
+            }
             return 0;
         }
+
+        case FB_IOCTL_VT_ENABLE:
+            vt_screen_set_enabled(1);
+            return 0;
+        case FB_IOCTL_VT_DISABLE:
+            vt_screen_set_enabled(0);
+            return 0;
 
         default:
             return -1;

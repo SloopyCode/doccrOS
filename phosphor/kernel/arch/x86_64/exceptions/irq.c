@@ -11,6 +11,7 @@
 #include "irq.h"
 #include "../idt/idt.h"
 #include <kernel/arch/x86_64/ports.h>
+#include <kernel/proc/signal.h>
 
 
 static irq_handler_t irq_handlers[16];
@@ -159,4 +160,6 @@ void irq_handler(cpu_state_t* state)
     if (irq < 16 && irq_handlers[irq] != NULL) {
         irq_handlers[irq](state);
     }
+
+    signal_check_and_deliver(state);
 }

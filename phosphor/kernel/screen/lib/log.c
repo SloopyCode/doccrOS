@@ -10,6 +10,7 @@
 
 #include "log.h"
 #include "print.h"
+#include <config.h>
 
 static u32 get_tag_color(log_level_t level)
 {

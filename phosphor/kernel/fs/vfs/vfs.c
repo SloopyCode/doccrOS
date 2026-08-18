@@ -279,7 +279,7 @@ int vfs_remove(const char *path)
 int vfs_write(vfs_node_t *node, const void *buf, u64 size, u64 offset)
 {
     if (!node || node->type != VFS_FILE || !buf) return -1;
-    if (offset + size > VFS_MAX_FILE_SIZE) return -1;
+    if (offset > VFS_MAX_FILE_SIZE || size > VFS_MAX_FILE_SIZE - offset) return -1;
 
     if (node->borrowed) {
         node->data = NULL;
@@ -303,9 +303,48 @@ int vfs_write(vfs_node_t *node, const void *buf, u64 size, u64 offset)
     }
 
     memcpy(node->data + offset, buf, size);
+
     if (needed > node->size) node->size = needed;
 
     return (int)size;
+}
+
+int vfs_truncate(vfs_node_t *node, u64 size)
+{
+    if (!node || node->type != VFS_FILE || size > VFS_MAX_FILE_SIZE) return -1;
+
+    if (node->borrowed)
+    {
+        if (size > node->size) return -1;
+
+        node->size = size;
+        return 0;
+    }
+
+    if (size == 0)
+    {
+        if (node->data) kfree((u64 *)node->data);
+        node->data = NULL;
+        node->size = 0;
+        node->capacity = 0;
+
+        return 0;
+    }
+
+    if (size > node->capacity)
+    {
+        u8 *newbuf = (u8 *)kmalloc(size);
+
+        if (!newbuf) return -1;
+        if (node->data && node->size) memcpy(newbuf, node->data, node->size);
+        if (node->data) kfree((u64 *)node->data);
+
+        node->data = newbuf;
+        node->capacity = size;
+    }
+
+    node->size = size;
+    return 0;
 }
 
 void vfs_set_data(vfs_node_t *node, u8 *ptr, u64 size)

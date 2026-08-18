@@ -13,6 +13,11 @@
 #include <kernel/screen/lib/string.h>
 #include <kernel/arch/hal/irqflags.h>
 
+#define EVENTFD_MAX_OBJECTS 64
+
+static eventfd_object_t *eventfd_registry[EVENTFD_MAX_OBJECTS];
+static u64 eventfd_next_id = 1;
+
 static int eventfd_dev_read(void *handle, void *buf, size_t count)
 {
     eventfd_object_t *eventfd_object = (eventfd_object_t *)handle;
@@ -157,7 +162,7 @@ static int eventfd_dev_write(void *handle, const void *buf, size_t count)
 static void eventfd_dev_close(void *handle)
 {
     eventfd_object_t *o = handle;
-    if (--o->refcount <= 0) eventfd_destroy(o);
+    eventfd_release(o);
 }
 
 device_handler eventfd_device_ops =
@@ -196,12 +201,97 @@ eventfd_object_t *eventfd_create(u64 initial_value, u32 flags)
     eventfd_object->counter  = initial_value;
     eventfd_object->flags = flags;
     eventfd_object->node  = eventfd_node;
+    eventfd_object->refcount = 1;
 
     wait_queue_init(&eventfd_object->readers);
     wait_queue_init(&eventfd_object->writers);
     wait_queue_init(&eventfd_object->drain);
 
+    irq_state_t saved_state = irq_save();
+
+    int slot = -1;
+    for (int i = 0; i < EVENTFD_MAX_OBJECTS; i++)
+    {
+        if (!eventfd_registry[i])
+        {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot >= 0)
+    {
+        eventfd_object->id = eventfd_next_id++;
+
+        eventfd_registry[slot] = eventfd_object;
+    }
+    else
+    {
+        eventfd_object->id = 0;
+    }
+
+    irq_restore(saved_state);
+
     return eventfd_object;
+}
+
+eventfd_object_t *eventfd_find(u64 id)
+{
+    if (id == 0) return NULL;
+
+    irq_state_t saved_state = irq_save();
+    eventfd_object_t *found = NULL;
+
+    for (int i = 0; i < EVENTFD_MAX_OBJECTS; i++)
+    {
+        if (eventfd_registry[i] && eventfd_registry[i]->id == id)
+        {
+            found = eventfd_registry[i];
+            break;
+        }
+    }
+
+    irq_restore(saved_state);
+    return found;
+}
+
+eventfd_object_t *eventfd_acquire(u64 id)
+{
+    eventfd_object_t *eventfd_object = eventfd_find(id);
+    if (!eventfd_object) return NULL;
+
+    irq_state_t saved_state = irq_save();
+
+    if (eventfd_object->closing)
+    {
+        irq_restore(saved_state);
+        return NULL;
+    }
+
+    eventfd_object->refcount++;
+
+    irq_restore(saved_state);
+
+    return eventfd_object;
+}
+
+void eventfd_release(eventfd_object_t  *eventfd_object)
+{
+    if (!eventfd_object) return;
+    if (--eventfd_object->refcount <= 0) eventfd_destroy(eventfd_object);
+}
+
+void eventfd_signal(eventfd_object_t *eventfd_object, u64 value)
+{
+    if (!eventfd_object || value == 0 || value == (u64)-1) return;
+
+    irq_state_t state = irq_save();
+    int signal = !eventfd_object->closing && value <= (u64)-1 - eventfd_object->counter;
+    if (signal) eventfd_object->counter += value;
+
+    irq_restore(state);
+
+    if (signal) wait_queue_wake_all(&eventfd_object->readers);
 }
 
 void eventfd_destroy(eventfd_object_t *eventfd_object)
@@ -228,6 +318,19 @@ void eventfd_destroy(eventfd_object_t *eventfd_object)
         wait_queue_block(&eventfd_object->drain);
         irq_restore(drain_state);
     }
+
+    irq_state_t reg_state = irq_save();
+
+    for (int i = 0; i < EVENTFD_MAX_OBJECTS; i++)
+    {
+        if (eventfd_registry[i] == eventfd_object)
+        {
+            eventfd_registry[i] = NULL;
+            break;
+        }
+    }
+
+    irq_restore(reg_state);
 
     kfree((u64 *)eventfd_object->node);
     kfree((u64 *)eventfd_object);

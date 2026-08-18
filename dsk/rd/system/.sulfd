@@ -1,0 +1,29 @@
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// Copyright (c) 2026 sulfurLabs
+//
+// PROJECT: sulfurOS
+// FILE: .sulfd
+//
+
+var desktop = ("/system/desktop/desktop.elf")
+var welcome = ("/system/desktop/welcome.elf")
+var login   = ("/system/desktop/login.elf")
+
+print(
+    "=> succesfully jumped into userspace... yay :3"
+)
+
+wait 5
+
+if desktop
+    exec desktop
+    exec login
+ef
+    var x1 = ("/system/x1.elf")
+    print(
+        ":: warning gui not active"
+    )
+    exec x1
+fi

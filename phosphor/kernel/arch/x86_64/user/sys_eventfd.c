@@ -58,3 +58,41 @@ void sys_eventfd(cpu_state_t *state)
     eventfd_destroy(eventfd_object);
     state->rax = (u64)-1;
 }
+
+void sys_eventfd_open(cpu_state_t *state)
+{
+    u64 id = (u64)state->rdi;
+
+    proc_t *process = process_get_current();
+    if (!process)
+    {
+        state->rax = (u64)-1;
+
+        return;
+    }
+
+    eventfd_object_t *eventfd_object = eventfd_acquire(id);
+    if (!eventfd_object)
+    {
+        state->rax = (u64)-1;
+
+        return;
+    }
+
+    for (int file_descriptor = 3; file_descriptor < FD_MAX; file_descriptor++)
+    {
+        if (!process->fd_table[file_descriptor].used)
+        {
+            process->fd_table[file_descriptor].node = eventfd_object->node;
+            process->fd_table[file_descriptor].offset = 0;
+            process->fd_table[file_descriptor].used = 1;
+            process->fd_table[file_descriptor].device_handle = eventfd_object;
+
+            state->rax = (u64)file_descriptor;
+            return;
+        }
+    }
+
+    eventfd_release(eventfd_object);
+    state->rax = (u64)-1;
+}

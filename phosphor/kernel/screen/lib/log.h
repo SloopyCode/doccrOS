@@ -14,11 +14,6 @@
 #include <types.h>
 #include "../colors.h"
 
-// if not set
-#ifndef BOOTUP_VISUALS
-#define BOOTUP_VISUALS 0
-#endif
-
 typedef enum {
     LNORMAL = 0,
     LSUCCESS,

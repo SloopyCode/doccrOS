@@ -18,6 +18,7 @@
 #include <kernel/mem/paging/paging.h>
 #include <kernel/communication/serial.h>
 #include <kernel/screen/lib/log.h>
+#include <kernel/proc/signal.h>
 
 static inline u64 align_up(u64 v, u64 a)
 {
@@ -99,22 +100,26 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
     const elf64_ehdr_t *eh = (const elf64_ehdr_t *)data;
     u64 hhdm = paging_get_hhdm_offset();
 
-    printf(
-        "[ELF] loading '%s': type=%u machine=0x%x entry=0x%llx phdrs=%u\n",
-        name,
-        (u32)eh->e_type,
-        (u32)eh->e_machine,
-        eh->e_entry,
-        (u32)eh->e_phnum
-    );
+    #if DEBUGINFO
+        printf(
+            "[ELF] loading '%s': type=%u machine=0x%x entry=0x%llx phdrs=%u\n",
+            name,
+            (u32)eh->e_type,
+            (u32)eh->e_machine,
+            eh->e_entry,
+            (u32)eh->e_phnum
+        );
+    #endif
 
     proc_t *p = process_create_user(name, initial_caps);
+    proc_t *spawner = process_get_current();
     if (!p)
     {
         printf("[ELF] process_create_user failed\n");
         return -1;
     }
     if (out_pid) *out_pid = p->pid;
+    if (spawner) memcpy(p->fd_table, spawner->fd_table, sizeof(spawner->fd_table));
 
     for (u16 i = 0; i < eh->e_phnum; i++)
     {
@@ -123,16 +128,18 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
 
         if (ph->p_type != PT_LOAD) continue;
 
-        printf(
-            "[ELF] seg %u: vaddr=0x%llx filesz=%llu memsz=%llu flags=%c%c%c\n",
-            (u32)i,
-            ph->p_vaddr,
-            ph->p_filesz,
-            ph->p_memsz,
-            (ph->p_flags & PF_R) ? 'R' : '-',
-            (ph->p_flags & PF_W) ? 'W' : '-',
-            (ph->p_flags & PF_X) ? 'X' : '-'
-        );
+        #if DEBUGINFO
+            printf(
+                "[ELF] seg %u: vaddr=0x%llx filesz=%llu memsz=%llu flags=%c%c%c\n",
+                (u32)i,
+                ph->p_vaddr,
+                ph->p_filesz,
+                ph->p_memsz,
+                (ph->p_flags & PF_R) ? 'R' : '-',
+                (ph->p_flags & PF_W) ? 'W' : '-',
+                (ph->p_flags & PF_X) ? 'X' : '-'
+            );
+        #endif
 
         if (ph->p_offset + ph->p_filesz > size)
         {
@@ -218,7 +225,9 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
             mem_rem   -= step;
         }
 
-        printf("[ELF] seg %u mapped va=0x%llx pages=%llu\n", (u32)i, va_base, pg_count);
+        #if DEBUGINFO
+            printf("[ELF] seg %u mapped va=0x%llx pages=%llu\n", (u32)i, va_base, pg_count);
+        #endif
     }
 
     u64 stack = vmm_space_alloc(
@@ -240,11 +249,13 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
         return -1;
     }
 
-    printf(
-        "[ELF] stack mapped: 0x%llx - 0x%llx\n",
-        USER_STACK_BASE,
-        USER_STACK_TOP
-    );
+    #if DEBUGINFO
+        printf(
+            "[ELF] stack mapped: 0x%llx - 0x%llx\n",
+            USER_STACK_BASE,
+            USER_STACK_TOP
+        );
+    #endif
 
     thread_t *t = thread_create_user(
         p,
@@ -261,23 +272,25 @@ int elf_load(const u8 *data, u64 size, const char *name, u64 initial_caps, u64 *
         return -1;
     }
 
-    printf(
-        "[ELF] launched '%s' entry=0x%llx stack_top=0x%llx\n",
-        name,
-        eh->e_entry,
-        USER_STACK_TOP
-    );
+    #if DEBUGINFO
+        printf(
+            "[ELF] launched '%s' entry=0x%llx stack_top=0x%llx\n",
+            name,
+            eh->e_entry,
+            USER_STACK_TOP
+        );
 
-    log("[ELF]", "process scheduled\n", success);
+        log("[ELF]", "process scheduled\n", success);
+    #endif
     return 0;
 }
 
 #define USER_STACK_PAGES_EXEC USER_STACK_PAGES
 
 static int elf_map_segments_and_stack(
-	proc_t *p,
-	const u8 *data,
-	u64 size,
+    proc_t *p,
+    const u8 *data,
+    u64 size,
     const elf64_ehdr_t *eh,
     u64 *out_entry
 ){
@@ -348,20 +361,179 @@ static int elf_map_segments_and_stack(
 }
 
 
-static u64 setup_initial_stack(vmm_space_t *space, const char *prog_name)
+#define EXEC_ARGSTR_MAX  256
+#define EXEC_ARGS_TOTAL  (16 * 1024)
+
+static int copy_from_user_space(vmm_space_t *space, u64 uaddr, void *kdst, u64 len)
+{
+    u64 hhdm = paging_get_hhdm_offset();
+    u64 va = uaddr;
+    u64 remaining = len;
+    u8 *dst = (u8 *)kdst;
+
+    while (remaining > 0)
+    {
+        u64 page_va  = va & ~0xFFFULL;
+        u64 page_off = va - page_va;
+        u64 phys     = vmm_space_get_phys(space, page_va);
+
+        if (!phys)
+            return -1;
+
+        u8 *src = (u8 *)(phys + hhdm + page_off);
+
+        u64 chunk = 4096 - page_off;
+        if (chunk > remaining) chunk = remaining;
+
+        memcpy(dst, src, chunk);
+
+        va += chunk;
+        dst += chunk;
+        remaining -= chunk;
+    }
+
+    return 0;
+}
+
+int elf_collect_user_argv(
+    vmm_space_t *space,
+    u64 user_argv,
+    char *argv_out[EXEC_ARGV_MAX],
+    int *argc_out
+)
+{
+    *argc_out = 0;
+    u64 total = 0;
+
+    if (user_argv == 0) return 0;
+    if (user_argv > 0x00007FFFFFFFFFFFULL) return -1;
+
+    for (int i = 0; i < EXEC_ARGV_MAX; i++)
+    {
+        u64 ptr_val;
+
+        if (
+            copy_from_user_space(
+                space,
+                user_argv + (u64)i * 8,
+                &ptr_val,
+                8
+            )
+            != 0
+        ) {
+            elf_free_argv(argv_out, i);
+            return -1;
+        }
+
+        if (ptr_val == 0)
+        {
+            *argc_out = i;
+            return 0;
+        }
+        if (ptr_val > 0x00007FFFFFFFFFFFULL)
+        {
+            elf_free_argv(argv_out, i);
+            return -1;
+        }
+
+        char tmp[EXEC_ARGSTR_MAX];
+        int len = 0;
+
+        for (; len < EXEC_ARGSTR_MAX - 1; len++)
+        {
+            char c;
+
+            if (
+                copy_from_user_space(
+                    space,
+                    ptr_val + (u64)len,
+                    &c,
+                    1
+                )
+                != 0
+            ){
+                elf_free_argv(argv_out, i);
+                return -1;
+            }
+
+            tmp[len] = c;
+
+            if (c == '\0') break;
+        }
+
+        tmp[len] = '\0';
+        total += (u64)len + 1;
+
+        if (total > EXEC_ARGS_TOTAL)
+        {
+            elf_free_argv(argv_out, i);
+            return -1;
+        }
+
+        argv_out[i] = (char *)kmalloc((u64)len + 1);
+
+        if (!argv_out[i])
+        {
+            elf_free_argv(argv_out, i);
+            return -1;
+        }
+
+        memcpy(
+            argv_out[i],
+            tmp,
+            (u64)len + 1
+        );
+    }
+
+    elf_free_argv(argv_out, EXEC_ARGV_MAX);
+    return -1;
+}
+
+void elf_free_argv(char *argv[EXEC_ARGV_MAX], int argc)
+{
+    for (int i = 0; i < argc; i++)
+    {
+        if (argv[i]) kfree((u64 *)argv[i]);
+    }
+}
+
+static u64 setup_initial_stack(
+    vmm_space_t *space,
+    const char *prog_name,
+    char **argv,
+    int argc
+)
 {
     u64 hhdm = paging_get_hhdm_offset();
     u64 top = USER_STACK_TOP;
 
-    u64 name_len = 0;
-    while (prog_name[name_len]) name_len++;
-    name_len++; /* NUL */
+    char *fallback[1];
 
-    u64 str_addr = (top - name_len) & ~0xFULL;
-
+    if (argc <= 0)
     {
-        u64 va = str_addr, remaining = name_len;
-        const char *src = prog_name;
+        fallback[0] = (char *)prog_name;
+        argv = fallback;
+        argc = 1;
+    }
+
+    u64 cursor = top;
+    u64 str_addrs[EXEC_ARGV_MAX];
+
+    for (int i = argc - 1; i >= 0; i--)
+    {
+        u64 slen = 0;
+
+        while (argv[i][slen]) slen++;
+
+        slen++;
+
+        cursor = (cursor - slen) & ~0xFULL;
+        str_addrs[i] = cursor;
+
+        u64 va = cursor;
+        u64 remaining = slen;
+        const char *src = argv[i];
+
         while (remaining > 0)
         {
             u64 page_va  = va & ~0xFFFULL;
@@ -374,38 +546,59 @@ static u64 setup_initial_stack(vmm_space_t *space, const char *prog_name)
             if (chunk > remaining) chunk = remaining;
 
             memcpy(dest, src, chunk);
-            va += chunk; src += chunk; remaining -= chunk;
+
+            va += chunk;
+            src += chunk;
+            remaining -= chunk;
         }
     }
 
-    u64 vals[6] = {
-        1,          /* argc */
-        str_addr,   /* argv[0] */
-        0,          /* argv terminator */
-        0,          /* envp terminator (leeres envp) */
-        0, 0        /* auxv terminator (AT_NULL) */
-    };
+    u64 nvals = 1 + (u64)argc + 1 + 1 + 2;
+    u64 vi = 0;
 
-    u64 sp = (str_addr - sizeof(vals)) & ~0xFULL;
+    u64 *vals = (u64 *)kmalloc(nvals * 8);
+    if (!vals) return 0;
 
+    vals[vi++] = (u64)argc;
+
+    for (int i = 0; i < argc; i++) vals[vi++] = str_addrs[i];
+
+    vals[vi++] = 0;
+    vals[vi++] = 0;
+    vals[vi++] = 0;
+    vals[vi++] = 0;
+
+    u64 sp = (cursor - nvals * 8) & ~0xFULL;
+
+    u64 va = sp;
+    u64 remaining = nvals * 8;
+    u8 *src = (u8 *)vals;
+
+    while (remaining > 0)
     {
-        u64 va = sp, remaining = sizeof(vals);
-        u8 *src = (u8 *)vals;
-        while (remaining > 0)
+        u64 page_va  = va & ~0xFFFULL;
+        u64 page_off = va - page_va;
+        u64 phys     = vmm_space_get_phys(space, page_va);
+
+        if (!phys)
         {
-            u64 page_va  = va & ~0xFFFULL;
-            u64 page_off = va - page_va;
-            u64 phys     = vmm_space_get_phys(space, page_va);
-            if (!phys) return 0;
-
-            u8 *dest  = (u8 *)(phys + hhdm + page_off);
-            u64 chunk = 4096 - page_off;
-            if (chunk > remaining) chunk = remaining;
-
-            memcpy(dest, src, chunk);
-            va += chunk; src += chunk; remaining -= chunk;
+            kfree((u64*)vals);
+            return 0;
         }
+
+        u8 *dest = (u8 *)(phys + hhdm + page_off);
+
+        u64 chunk = 4096 - page_off;
+        if (chunk > remaining) chunk = remaining;
+
+        memcpy(dest, src, chunk);
+
+        va += chunk;
+        src += chunk;
+        remaining -= chunk;
     }
+
+    kfree((u64 *)vals);
 
     return sp;
 }
@@ -429,8 +622,15 @@ static void kill_sibling_threads(proc_t *p, thread_t *caller)
     }
 }
 
-int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, const char *name)
-{
+int elf_exec_replace(
+    proc_t *p,
+    cpu_state_t *state,
+    const u8 *data,
+    u64 size,
+    const char *name,
+    char *argv[EXEC_ARGV_MAX],
+    int argc
+) {
     if (!p || !state || !data || size == 0) return -1;
     if (elf_check(data, size) != 0) return -1;
 
@@ -439,7 +639,9 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
 
     const elf64_ehdr_t *eh = (const elf64_ehdr_t *)data;
 
-    printf("[ELF] execve replacing '%s' image with '%s'\n", p->name, name ? name : "?");
+    #if DEBUGINFO
+        printf("[ELF] execve replacing '%s' image with '%s'\n", p->name, name ? name : "?");
+    #endif
 
     thread_t *self = thread_get_current();
     kill_sibling_threads(p, self);
@@ -455,7 +657,10 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     u64 entry = 0;
     if (elf_map_segments_and_stack(p, data, size, eh, &entry) != 0)
     {
-        printf("[ELF] execve: mapping new image failed, address space is gone\n");
+        #if DEBUGINFO
+            printf("[ELF] execve: mapping new image failed, address space is gone\n");
+        #endif
+
         __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
         return -1;
     }
@@ -471,21 +676,24 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     {
         int k  = 0;
         while (
-        	name[k] &&
-         	k < THREAD_NAME_MAX - 1
+            name[k] &&
+            k < THREAD_NAME_MAX - 1
         ) {
-        	self->name[k] = name[k];
-         	k++;
+            self->name[k] = name[k];
+            k++;
         }
         self->name[k] = '\0';
     }
 
     p->heap_break = 0;
 
-    u64 stack_top = setup_initial_stack(p->space, name);
+    u64 stack_top = setup_initial_stack(p->space, name, argv, argc);
     if (!stack_top)
     {
-        printf("[ELF] execve, setup initial stack '%s'\n", name);
+        #if DEBUGINFO
+            printf("[ELF] execve, setup initial stack '%s'\n", name);
+        #endif
+
         __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
         return -1;
     }
@@ -509,7 +717,11 @@ int elf_exec_replace(proc_t *p, cpu_state_t *state, const u8 *data, u64 size, co
     state->r14    = 0;
     state->r15    = 0;
 
-    log("[ELF]", "execve replaced process image\n", success);
+    signal_on_exec(p);
+
+    #if DEBUGINFO
+        log("[ELF]", "execve replaced process image\n", success);
+    #endif
 
     __asm__ volatile("push %0; popfq" :: "r"(saved_flags) : "memory", "cc");
 

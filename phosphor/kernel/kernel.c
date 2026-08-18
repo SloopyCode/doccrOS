@@ -58,8 +58,6 @@ void _start(void)
         hcf();
     }
 
-    delay(20);
-
     // Initialize framebuffer graphics
     struct limine_framebuffer *fb = framebuffer_request.response->framebuffers[0];
     serial_init();
@@ -101,11 +99,11 @@ void _start(void)
     sched_init();
 
     proc_t *kproc = process_create("kernel");
-    thread_t *t_idle = thread_create(kproc, "idle", idle_fn, NULL);
+    thread_t *t_rt = thread_create(kproc, "__rt", idle_fn, NULL);
     if (!kproc) panic("could not create kernel proc, rip");
-    if (!t_idle) panic("could not create idle thread");
+    if (!t_rt) panic("could not create \"__rt\" thread");
 
-    sched_set_idle(t_idle);
+    sched_set_idle(t_rt);
 
     vfs_init();
     rootfs_init();

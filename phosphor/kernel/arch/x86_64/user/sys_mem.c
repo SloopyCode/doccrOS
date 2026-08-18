@@ -9,6 +9,7 @@
  */
 
 #include "sys_mem.h"
+#include "ptr.h"
 #include <kernel/proc/process.h>
 #include <kernel/mem/vmm/vmm.h>
 #include <kernel/communication/serial.h>

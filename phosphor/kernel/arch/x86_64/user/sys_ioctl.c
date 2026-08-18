@@ -9,57 +9,60 @@
  */
 
 #include "sys_ioctl.h"
+#include "ptr.h"
+#include "../../../fs/openfile.h"
 #include <kernel/proc/process.h>
 #include <kernel/fs/vfs/vfs.h>
 #include <kernel/devices/device_init.h>
 
-static int user_ptr_ok(u64 ptr)
-{
-    return ptr     != 0 && ptr <= 0x00007FFFFFFFFFFFULL;
-}
-
 void sys_ioctl(cpu_state_t *state)
 {
-    u64 fd         = state->rdi;
-    u64 request    = state->rsi;
-    void *arg      = (void *)state->rdx;
+    u64 fd      = state->rdi;
+    u64 request = state->rsi;
+    void *arg   = (void *)state->rdx;
 
-    if (fd < 3     || fd >= FD_MAX)
+    if (fd >= FD_MAX)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    // arg is optional
-    if (arg &&     !user_ptr_ok((u64)arg))
+    if (arg && !user_ptr_ok((u64)arg))
     {
         state->rax = (u64)-1;
         return;
     }
 
-    proc_t *p      = process_get_current();
+    proc_t *p = process_get_current();
     if (!p || !p->fd_table[fd].used)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    vfs_node_t *node   = p->fd_table[fd].node;
-    if (!node || node->type != VFS_DEVICE)
-    {
-        state->rax = (u64)-1; // ioctl only makes sense on devices
-        return;
-    }
-
-    if (!node->device  || !node->device->ioctl)
+    int ofd = p->fd_table[fd].ofd;
+    if (ofd < 0)
     {
         state->rax = (u64)-1;
         return;
     }
 
-    state->rax = (u64)node->device->ioctl(
-    	p->fd_table[fd].device_handle,
-     	request,
-     	arg
+    open_file_t *of = openfile_get(ofd);
+    if (!of || !of->node || of->node->type != VFS_DEVICE)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    if (!of->node->device || !of->node->device->ioctl)
+    {
+        state->rax = (u64)-1;
+        return;
+    }
+
+    state->rax = (u64)of->node->device->ioctl(
+        of->device_handle,
+        request,
+        arg
     );
 }

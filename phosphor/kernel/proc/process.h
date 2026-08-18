@@ -8,8 +8,7 @@
  *
  */
 
-#ifndef PROCESS_H
-#define PROCESS_H
+#pragma once
 
 #include <types.h>
 #include "thread.h"
@@ -24,11 +23,17 @@
 #define CAP_AUDIO          (1ULL << 2)
 #define CAP_NETWORK        (1ULL << 3)
 
+#define MAX_SIGNALS 32
+#define SIG_DFL ((u64)0)
+#define SIG_IGN ((u64)1)
+
 typedef struct {
     vfs_node_t *node;
-    u64         offset;
-    int         used;
-    void        *device_handle; //return by device->open()
+    u64    offset;
+
+    int used;
+    int ofd;
+    void    *device_handle; //return by device open()
     // for VFS_DEVICE nodes
 } file_descriptor_t;
 
@@ -61,6 +66,13 @@ typedef struct proc
 
     file_descriptor_t fd_table[FD_MAX];
 
+    u64 pending_signals;
+
+    u64 sig_handlers[MAX_SIGNALS];
+    u64 sig_trampoline;
+
+    int in_signal;
+
     struct proc     *next;
 } proc_t;
 
@@ -71,6 +83,7 @@ proc_t *process_create(const char *name);
 proc_t *process_create_user(const char *name, u64 initial_caps);
 proc_t *process_get_current(void);
 proc_t *process_fork(cpu_state_t *parent_state);
+proc_t *process_find_by_pid(u64 pid);
 
 int process_waitpid(proc_t *parent, i64 target_pid, int *exit_code_out);
 int process_has_cap(proc_t *p, u64 cap);
@@ -80,5 +93,3 @@ void process_reap_zombies(void);
 
 void process_grant_cap(proc_t *p, u64 cap);
 void process_revoke_cap(proc_t *p, u64 cap);
-
-#endif

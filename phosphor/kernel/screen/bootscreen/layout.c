@@ -44,6 +44,7 @@ static void bs_setup_screen
 ) {
     bs_size_clamp(&width, &height);
 
+    bs.Screens[screen].visible     = 1;
     bs.Screens[screen].cursor_x    = 0;
     bs.Screens[screen].cursor_y    = 0;
     bs.Screens[screen].buffer      = buffer;
@@ -70,10 +71,10 @@ void bootscreen_layout_init(void)
 
     // BS1 left
     bs_setup_screen(
-    	BS1, //screen
-     	bs_pix_bs1, //pixels
-      	bs_buf_bs1, // buffer
-       	0,    //x
+        BS1, //screen
+        bs_pix_bs1, //pixels
+        bs_buf_bs1, // buffer
+        0,    //x
         0,    //y
         half, // w
         fh    // h
@@ -81,21 +82,21 @@ void bootscreen_layout_init(void)
 
     // BS2 right
     bs_setup_screen(
-    	BS2,
-     	bs_pix_bs2,
-      	bs_buf_bs2,
-       	half,
+        BS2,
+        bs_pix_bs2,
+        bs_buf_bs2,
+        half,
         0,
         half,
         mid
     );
 
-    // BS3 whole screen for fb0 device
+    // BS3 whole screen for fb0//tty
     bs_setup_screen(
-    	BS3,
-     	NULL,
-      	bs_buf_bs3,
-       	0,
+        BS3,
+        NULL,
+        bs_buf_bs3,
+        0,
         0,
         fw,
         fh
@@ -103,10 +104,10 @@ void bootscreen_layout_init(void)
 
     // BS4 also for userspace ig but idk
     bs_setup_screen(
-    	BS4,
-     	bs_pix_bs4,
-      	bs_buf_bs4,
-       	half,
+        BS4,
+        bs_pix_bs4,
+        bs_buf_bs4,
+        half,
         mid,
         half,
         fh - mid
@@ -119,29 +120,29 @@ void bootscreen_bs3_init_backbuffer(void)
 {
     bs_screen_t *scr  = &bs.Screens[BS3];
 
-    u64 size  = (u64)scr->width * scr->height * sizeof(u32);
-    u64 page_count    = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+    u64 size = (u64)scr->width * scr->height * sizeof(u32);
+    u64 page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
 
     u64 phys  = physmem_alloc_to(page_count);
     if (!phys)
     {
         log(
-        	"[BOOT]",
-         	"could not allocate BS3 backbuffer, fb0 will stay unavailable\n",
-          	warning
+            "[BOOT]",
+            "could not allocate BS3 backbuffer, fb0 will stay unavailable\n",
+            warning
         );
         return;
     }
 
-    u64 hhdm  = paging_get_hhdm_offset();
+    u64 hhdm = paging_get_hhdm_offset();
 
-    scr->pixels      = (u32 *)(phys + hhdm);
+    scr->pixels = (u32 *)(phys + hhdm);
     scr->pixels_phys = phys;
 
     memset(
-    	scr->pixels,
-     	0,
-      	page_count * PAGE_SIZE
+        scr->pixels,
+        0,
+        page_count * PAGE_SIZE
     );
 
     log("[BOOT]", "BS3 backbuffer ready\n", success);

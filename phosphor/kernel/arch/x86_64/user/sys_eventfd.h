@@ -15,5 +15,6 @@
 #include <kernel/arch/x86_64/idt/idt.h>
 
 void sys_eventfd(cpu_state_t *state);
+void sys_eventfd_open(cpu_state_t *state);
 
 #endif
